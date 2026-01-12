@@ -1,0 +1,87 @@
+﻿
+> momcast@0.1.0 build
+> next build
+
+   ??Next.js 15.1.4
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ??Compiled successfully
+   Linting and checking validity of types ...
+node.exe : Failed to c
+ompile.
+위치 C:\Program Files\no
+dejs\npm.ps1:29 문자:3
++   & $NODE_EXE $NPM_C
+LI_JS $args
++   ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Failed to    
+ compile.:String)     
+[], RemoteExcepti    o
+n
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+
+./src/app/AppWrapper.t
+sx:480:58
+Type error: Property '
+userImageUrl' does not
+ exist on type 'AdminS
+cene | UserScene'.
+  Property 'userImageU
+rl' does not exist on 
+type 'AdminScene'.
+
+[0m [90m 478 |[39m
+[0m
+[0m [90m 479 |[39m 
+  [36mconst[39m crop
+ [33m=[39m currentSc
+ene[33m.[39mcropRect
+ [33m||[39m { top[3
+3m:[39m [35m0[39m[
+33m,[39m left[33m:[
+39m [35m0[39m[33m,
+[39m right[33m:[39m 
+[35m0[39m[33m,[39m
+ bottom[33m:[39m [3
+5m0[39m }[33m;[39m
+[0m
+[0m[31m[1m>[22m[3
+9m[90m 480 |[39m   
+[36mconst[39m userPho
+toUrl [33m=[39m isAd
+minMode [33m?[39m [
+36mnull[39m [33m:[3
+9m currentScene[33m.
+[39muserImageUrl[33m;
+[39m[0m
+[0m [90m     |[39m 
+                      
+                      
+             [31m[1m
+^[22m[39m[0m
+[0m [90m 481 |[39m 
+  [36mconst[39m crop
+ImageSrc [33m=[39m i
+sAdminMode [33m?[39m
+ (currentScene[33m.[
+39moverlayUrl [33m||
+[39m [36mnull[39m) 
+[33m:[39m (userPhotoU
+rl [33m||[39m [36mn
+ull[39m)[33m;[39m[
+0m
+[0m [90m 482 |[39m
+[0m
+[0m [90m 483 |[39m 
+  [36mreturn[39m ([
+0m
+Static worker exited w
+ith code: 1 and signal
+: null

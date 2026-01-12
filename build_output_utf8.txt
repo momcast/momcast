@@ -1,0 +1,211 @@
+﻿
+> momcast@0.1.0 build
+> next build
+
+   ??Next.js 15.1.4
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ??Compiled successfully
+   Linting and checking validity of types ...
+node.exe : 
+위치 C:\Program Files\node
+js\npm.ps1:29 문자:3
++   & $NODE_EXE $NPM_CLI
+_JS $args
++   ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo      
+        : NotSpeci    fi
+ed: (:String) [    ], Re
+moteExceptio    n
+    + FullyQualifiedE   
+ rrorId : NativeCo    mm
+andError
+ 
+Failed to compile.
+
+./src/app/AppWrapper.tsx
+81:11  Warning: Using `<
+img>` could result in sl
+ower LCP and higher band
+width. Consider using `<
+Image />` from `next/ima
+ge` or a custom image lo
+ader to automatically op
+timize images. This may 
+incur additional usage o
+r cost from your provide
+r. See: https://nextjs.o
+rg/docs/messages/no-img-
+element  @next/next/no-i
+mg-element
+81:11  Warning: img elem
+ents must have an alt pr
+op, either with meaningf
+ul text, or an empty str
+ing for decorative image
+s.  jsx-a11y/alt-text
+98:11  Warning: Using `<
+img>` could result in sl
+ower LCP and higher band
+width. Consider using `<
+Image />` from `next/ima
+ge` or a custom image lo
+ader to automatically op
+timize images. This may 
+incur additional usage o
+r cost from your provide
+r. See: https://nextjs.o
+rg/docs/messages/no-img-
+element  @next/next/no-i
+mg-element
+98:11  Warning: img elem
+ents must have an alt pr
+op, either with meaningf
+ul text, or an empty str
+ing for decorative image
+s.  jsx-a11y/alt-text
+125:15  Warning: Using `
+<img>` could result in s
+lower LCP and higher ban
+dwidth. Consider using `
+<Image />` from `next/im
+age` or a custom image l
+oader to automatically o
+ptimize images. This may
+ incur additional usage 
+or cost from your provid
+er. See: https://nextjs.
+org/docs/messages/no-img
+-element  @next/next/no-
+img-element
+125:15  Warning: img ele
+ments must have an alt p
+rop, either with meaning
+ful text, or an empty st
+ring for decorative imag
+es.  jsx-a11y/alt-text
+233:6  Warning: React Ho
+ok useEffect has a missi
+ng dependency: 'onUpdate
+'. Either include it or 
+remove the dependency ar
+ray. If 'onUpdate' chang
+es too often, find the p
+arent component that def
+ines it and wrap that de
+finition in useCallback.
+  react-hooks/exhaustive
+-deps
+248:11  Warning: Using `
+<img>` could result in s
+lower LCP and higher ban
+dwidth. Consider using `
+<Image />` from `next/im
+age` or a custom image l
+oader to automatically o
+ptimize images. This may
+ incur additional usage 
+or cost from your provid
+er. See: https://nextjs.
+org/docs/messages/no-img
+-element  @next/next/no-
+img-element
+248:11  Warning: img ele
+ments must have an alt p
+rop, either with meaning
+ful text, or an empty st
+ring for decorative imag
+es.  jsx-a11y/alt-text
+339:14  Error: 'err' is 
+defined but never used. 
+ @typescript-eslint/no-u
+nused-vars
+542:21  Warning: Using `
+<img>` could result in s
+lower LCP and higher ban
+dwidth. Consider using `
+<Image />` from `next/im
+age` or a custom image l
+oader to automatically o
+ptimize images. This may
+ incur additional usage 
+or cost from your provid
+er. See: https://nextjs.
+org/docs/messages/no-img
+-element  @next/next/no-
+img-element
+542:21  Warning: img ele
+ments must have an alt p
+rop, either with meaning
+ful text, or an empty st
+ring for decorative imag
+es.  jsx-a11y/alt-text
+602:175  Error: Unexpect
+ed any. Specify a differ
+ent type.  @typescript-e
+slint/no-explicit-any
+634:25  Warning: Using `
+<img>` could result in s
+lower LCP and higher ban
+dwidth. Consider using `
+<Image />` from `next/im
+age` or a custom image l
+oader to automatically o
+ptimize images. This may
+ incur additional usage 
+or cost from your provid
+er. See: https://nextjs.
+org/docs/messages/no-img
+-element  @next/next/no-
+img-element
+634:25  Warning: img ele
+ments must have an alt p
+rop, either with meaning
+ful text, or an empty st
+ring for decorative imag
+es.  jsx-a11y/alt-text
+649:97  Error: Unexpecte
+d any. Specify a differe
+nt type.  @typescript-es
+lint/no-explicit-any
+708:18  Error: 'e' is de
+fined but never used.  @
+typescript-eslint/no-unu
+sed-vars
+797:21  Error: Unexpecte
+d any. Specify a differe
+nt type.  @typescript-es
+lint/no-explicit-any
+858:13  Warning: Using `
+<img>` could result in s
+lower LCP and higher ban
+dwidth. Consider using `
+<Image />` from `next/im
+age` or a custom image l
+oader to automatically o
+ptimize images. This may
+ incur additional usage 
+or cost from your provid
+er. See: https://nextjs.
+org/docs/messages/no-img
+-element  @next/next/no-
+img-element
+858:13  Warning: img ele
+ments must have an alt p
+rop, either with meaning
+ful text, or an empty st
+ring for decorative imag
+es.  jsx-a11y/alt-text
+1267:28  Error: '_err' i
+s defined but never used
+.  @typescript-eslint/no
+-unused-vars
+
+info  - Need to disable 
+some ESLint rules? Learn
+ more here: https://next
+js.org/docs/app/api-refe
+rence/config/eslint#disa
+bling-rules

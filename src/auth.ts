@@ -1,0 +1,73 @@
+import NextAuth, { type DefaultSession, type User } from "next-auth"
+import type { JWT } from "next-auth/jwt"
+import NaverProvider from "next-auth/providers/naver"
+import { findOrCreateUser } from "@/lib/supabase-admin"
+
+declare module "next-auth" {
+    interface Session {
+        user: {
+            id: string
+        } & DefaultSession["user"]
+    }
+
+    interface User {
+        supabase_uid?: string
+    }
+}
+
+declare module "next-auth/jwt" {
+    interface JWT {
+        supabase_uid?: string
+    }
+}
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+    providers: [
+        NaverProvider({
+            clientId: process.env.AUTH_NAVER_ID,
+            clientSecret: process.env.AUTH_NAVER_SECRET,
+        }),
+    ],
+    callbacks: {
+        async signIn({ user, account, profile }) {
+            if (account?.provider === "naver") {
+                try {
+                    const naverId = profile?.id as string;
+                    if (!naverId) return false;
+
+                    const supabaseUser = await findOrCreateUser(
+                        naverId,
+                        user.email || undefined,
+                        user.name || undefined
+                    );
+                    if (!supabaseUser) return false;
+
+                    // Store Supabase ID in the user object for the jwt callback
+                    // Semicolon before ( is critical in TS if the previous line is an expression
+                    user.supabase_uid = supabaseUser.id;
+                    return true;
+                } catch (error) {
+                    console.error("Error syncing user to Supabase:", error);
+                    return false;
+                }
+            }
+            return true;
+        },
+        async jwt({ token, user }) {
+            const t = token as JWT;
+            if (user) {
+                t.supabase_uid = (user as User).supabase_uid;
+            }
+            return t;
+        },
+        async session({ session, token }) {
+            if (token.supabase_uid && session.user) {
+                session.user.id = token.supabase_uid as string;
+            }
+            return session;
+        },
+    },
+    pages: {
+        signIn: "/login",
+    },
+})
