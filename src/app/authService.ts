@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient'
 import type { UserProfile } from './supabaseClient'
-import type { Provider } from '@supabase/supabase-js'
 import { signIn as nextAuthSignIn } from "next-auth/react"
 
 /**
