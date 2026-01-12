@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 import type { UserProfile } from './supabaseClient'
 import type { Provider } from '@supabase/supabase-js'
+import { signIn as nextAuthSignIn } from "next-auth/react"
 
 /**
  * 이메일/비밀번호로 회원가입
@@ -76,14 +77,9 @@ export const getCurrentUserProfile = async (): Promise<UserProfile | null> => {
  * 네이버로 로그인
  */
 export const signInWithNaver = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'naver' as Provider,
-        options: {
-            redirectTo: typeof window !== 'undefined' ? window.location.origin : ''
-        }
-    })
-    if (error) throw error
-    return data
+    // Supabase does not support Naver natively.
+    // We use Next-Auth to handle Naver login and sync with Supabase.
+    await nextAuthSignIn("naver", { callbackUrl: "/" })
 }
 
 /**
