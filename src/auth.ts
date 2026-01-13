@@ -31,16 +31,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }),
     ],
     callbacks: {
-        async jwt({ token, user }) {
-            const t = token as JWT;
+        async jwt({ token, user, account }) {
+            // 첫 로그인 시 user 정보를 token에 저장
             if (user) {
-                t.supabase_uid = (user as User).supabase_uid;
+                token.id = user.id;
+                token.email = user.email;
+                token.name = user.name;
+                token.picture = user.image;
             }
-            return t;
+            return token;
         },
         async session({ session, token }) {
-            if (token.supabase_uid && session.user) {
-                session.user.id = token.supabase_uid as string;
+            // token 정보를 session에 복사
+            if (session.user) {
+                session.user.id = token.id as string;
+                session.user.email = token.email as string;
+                session.user.name = token.name as string;
+                session.user.image = token.picture as string;
             }
             return session;
         },
