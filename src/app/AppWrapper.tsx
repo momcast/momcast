@@ -687,13 +687,13 @@ export default function App() {
   // NextAuth 세션 동기화 (Naver 등)
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
+      const email = (session.user as any).email || "";
       setUser({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        id: (session.user as any).id || (session.user as any).email || "naver_user",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        email: (session.user as any).email || "",
+        id: (session.user as any).id || email || "naver_user",
+        email: email,
         name: session.user.name || "네이버 사용자",
-        role: 'user'
+        role: email === 'new2jjang@naver.com' ? 'admin' : 'user'
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     }
