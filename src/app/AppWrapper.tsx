@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { signUp, signIn, signOut, onAuthStateChange, signInWithNaver } from './authService'
+import { signOut, onAuthStateChange, signInWithNaver } from './authService'
 import { useSession } from "next-auth/react";
 import { saveUserRequest } from './dbService'
 import { uploadImage } from './firebase'
@@ -661,7 +661,6 @@ const SceneEditor: React.FC<{
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [authError, setAuthError] = useState('');
   const [view, setView] = useState<'dashboard' | 'editor' | 'history' | 'admin_requests'>('dashboard');
   const [prevView, setPrevView] = useState<'dashboard' | 'editor' | 'history' | 'admin_requests'>('dashboard');
 
@@ -687,6 +686,7 @@ export default function App() {
   // NextAuth 세션 동기화 (Naver 등)
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const email = (session.user as any).email || "";
       setUser({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -809,7 +809,6 @@ export default function App() {
         <h1 className="text-[64px] font-black text-[#ffb3a3] mb-14 tracking-tighter italic select-none">MOMCAST</h1>
         <div className="w-full bg-white border border-[#dadada] rounded-lg shadow-xl p-12 mb-10">
           <div className="space-y-5">
-            {authError && <p className="text-red-500 text-sm text-center">{authError}</p>}
             <button
               onClick={() => signInWithNaver()}
               className="w-full py-5 bg-[#03C75A] text-white font-black text-xl rounded-lg shadow-lg hover:bg-[#02b350] transition-colors flex items-center justify-center gap-3"
