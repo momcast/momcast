@@ -2,6 +2,7 @@
 export default function BugCheckPage() {
     const envStatus = {
         AUTH_SECRET: process.env.AUTH_SECRET ? 'OK (Exists)' : 'MISSING (!!!)',
+        AUTH_URL: process.env.AUTH_URL ? `OK (${process.env.AUTH_URL})` : 'MISSING (!!!)',
         AUTH_NAVER_ID: process.env.AUTH_NAVER_ID ? `OK (${process.env.AUTH_NAVER_ID.substring(0, 5)}...)` : 'MISSING (!!!)',
         AUTH_NAVER_SECRET: process.env.AUTH_NAVER_SECRET ? `OK (Start: ${process.env.AUTH_NAVER_SECRET.substring(0, 3)}, Len: ${process.env.AUTH_NAVER_SECRET.length})` : 'MISSING (!!!)',
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? `OK (Len: ${process.env.SUPABASE_SERVICE_ROLE_KEY.length})` : 'MISSING (!!!)',
