@@ -678,16 +678,19 @@ export default function App() {
   // 인증 상태 리스너 (Supabase)
   useEffect(() => {
     const { data: { subscription } } = onAuthStateChange((profile) => {
-      if (profile) setUser(profile);
+      // NextAuth 세션이 없을 때만 Supabase 프로필 반영
+      if (profile && status !== "authenticated") {
+        setUser(profile);
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [status]);
 
   // NextAuth 세션 동기화 (Naver 등)
   useEffect(() => {
     if (status === "authenticated" && session?.user) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const email = (session.user as any).email || "";
+      const email = ((session.user as any).email || "").toLowerCase();
       setUser({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         id: (session.user as any).id || email || "naver_user",
