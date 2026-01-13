@@ -695,7 +695,8 @@ export default function App() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const id = (session.user as any).id || email || "naver_user";
 
-      const isAdmin = email.includes('new2jjang');
+      // 어드민 조건: new2jjang@empas.com 계정만 어드민으로 인정
+      const isAdmin = email === 'new2jjang@empas.com';
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const userData: any = {
@@ -708,11 +709,7 @@ export default function App() {
       setUser(userData);
 
       if (status === "authenticated") {
-        console.log("[Auth Debug] Session User:", { id, email, name, isAdmin });
-        // 긴급 진단용 알림 (배포 확인용)
-        if (email.includes('new2jjang')) {
-          alert(`[어드민 감지] 이메일: ${email}\n역할: ${isAdmin ? 'admin' : 'user'}\n버전: v1.2`);
-        }
+        console.log("[Auth] User logged in:", { email, isAdmin });
       }
     }
   }, [session, status]);
@@ -845,11 +842,8 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 flex flex-col font-['Noto_Sans_KR'] text-gray-900 w-full overflow-x-hidden">
       <header className="bg-white/80 border-b border-gray-100 sticky top-0 z-40 backdrop-blur-xl shrink-0 w-full">
         <div className="max-w-[1600px] mx-auto px-6 md:px-12 lg:px-24 py-5 md:py-8 flex justify-between items-center w-full">
-          <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => {
-            alert(`[현재 정보]\n이메일: ${user?.email}\n역할: ${user?.role}\n상태: ${status}\n버전: v1.2`);
-            setView('dashboard');
-          }}>
-            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST <span className="text-[10px] text-gray-300">v1.2</span>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => setView('dashboard')}>
+            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST
           </h1>
           <div className="flex items-center gap-4 md:gap-12">
             <nav className="flex gap-4 md:gap-10">
