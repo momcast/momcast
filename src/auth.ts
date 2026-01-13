@@ -27,6 +27,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         NaverProvider({
             clientId: process.env.AUTH_NAVER_ID,
             clientSecret: process.env.AUTH_NAVER_SECRET,
+            checks: ["nonce"],
         }),
     ],
     callbacks: {
