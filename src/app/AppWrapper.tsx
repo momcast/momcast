@@ -661,9 +661,6 @@ const SceneEditor: React.FC<{
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [authError, setAuthError] = useState('');
   const [view, setView] = useState<'dashboard' | 'editor' | 'history' | 'admin_requests'>('dashboard');
   const [prevView, setPrevView] = useState<'dashboard' | 'editor' | 'history' | 'admin_requests'>('dashboard');
@@ -802,18 +799,7 @@ export default function App() {
     setUser(null);
   };
 
-  const handleAuth = async () => {
-    setAuthError('');
-    try {
-      if (authMode === 'signin') {
-        await signIn(email, password);
-      } else {
-        await signUp(email, password);
-      }
-    } catch (error: unknown) {
-      setAuthError(error instanceof Error ? error.message : '로그인에 실패했습니다.');
-    }
-  };
+
 
   const isAdminMode = user?.role === 'admin' && !activeProject;
 
@@ -822,42 +808,14 @@ export default function App() {
       <div className="w-full max-w-[460px] flex flex-col items-center">
         <h1 className="text-[64px] font-black text-[#ffb3a3] mb-14 tracking-tighter italic select-none">MOMCAST</h1>
         <div className="w-full bg-white border border-[#dadada] rounded-lg shadow-xl p-12 mb-10">
-          <div className="space-y-5 mb-10">
-            <div className="relative group">
-              <input
-                type="email"
-                placeholder="이메일"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-5 py-4 border border-[#dadada] rounded-t-lg outline-none focus:border-[#ffb3a3] bg-gray-50/50 transition-colors"
-              />
-              <input
-                type="password"
-                placeholder="비밀번호"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAuth()}
-                className="w-full px-5 py-4 border border-t-0 border-[#dadada] rounded-b-lg outline-none focus:border-[#ffb3a3] bg-gray-50/50 transition-colors"
-              />
-            </div>
+          <div className="space-y-5">
             {authError && <p className="text-red-500 text-sm text-center">{authError}</p>}
             <button
-              onClick={handleAuth}
-              className="w-full py-5 bg-[#03C75A] text-white font-black text-xl rounded-lg shadow-lg hover:bg-[#02b350] transition-colors"
-            >
-              {authMode === 'signin' ? '로그인' : '회원가입'}
-            </button>
-            <button
               onClick={() => signInWithNaver()}
-              className="w-full py-5 bg-[#03C75A] text-white font-black text-xl rounded-lg shadow-lg hover:bg-[#02b350] transition-colors flex items-center justify-center gap-3 mt-4"
+              className="w-full py-5 bg-[#03C75A] text-white font-black text-xl rounded-lg shadow-lg hover:bg-[#02b350] transition-colors flex items-center justify-center gap-3"
             >
               <span className="bg-white text-[#03C75A] px-2 py-0.5 rounded text-[10px] font-bold">N</span>
               네이버 아이디로 로그인
-            </button>
-          </div>
-          <div className="flex justify-center gap-5 text-sm text-[#8e8e8e] font-medium">
-            <button onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}>
-              {authMode === 'signin' ? '회원가입' : '로그인으로 돌아가기'}
             </button>
           </div>
         </div>
