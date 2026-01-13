@@ -22,6 +22,8 @@ declare module "next-auth/jwt" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+    debug: true, // Enable debug mode to see detailed error messages
+    trustHost: true, // Trust the host header (required for Vercel)
     providers: [
         NaverProvider({
             clientId: process.env.AUTH_NAVER_ID,
