@@ -697,18 +697,21 @@ export default function App() {
 
       const isAdmin = email.includes('new2jjang');
 
-      setUser({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const userData: any = {
         id: id,
         email: email,
         name: name,
         role: isAdmin ? 'admin' : 'user'
-      } as any);
+      };
+
+      setUser(userData);
 
       if (status === "authenticated") {
         console.log("[Auth Debug] Session User:", { id, email, name, isAdmin });
         // 긴급 진단용 알림 (배포 확인용)
         if (email.includes('new2jjang')) {
-          alert(`[어드민 감지] 이메일: ${email}\n역할: ${isAdmin ? 'admin' : 'user'}\n이 알림이 보인다면 최신 버전입니다.`);
+          alert(`[어드민 감지] 이메일: ${email}\n역할: ${isAdmin ? 'admin' : 'user'}\n버전: v1.2`);
         }
       }
     }
@@ -843,10 +846,10 @@ export default function App() {
       <header className="bg-white/80 border-b border-gray-100 sticky top-0 z-40 backdrop-blur-xl shrink-0 w-full">
         <div className="max-w-[1600px] mx-auto px-6 md:px-12 lg:px-24 py-5 md:py-8 flex justify-between items-center w-full">
           <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => {
-            alert(`[현재 정보]\n이메일: ${user?.email}\n역할: ${user?.role}\n상태: ${status}\n버전: v1.1`);
+            alert(`[현재 정보]\n이메일: ${user?.email}\n역할: ${user?.role}\n상태: ${status}\n버전: v1.2`);
             setView('dashboard');
           }}>
-            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST <span className="text-[10px] text-gray-300">v1.1</span>
+            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST <span className="text-[10px] text-gray-300">v1.2</span>
           </h1>
           <div className="flex items-center gap-4 md:gap-12">
             <nav className="flex gap-4 md:gap-10">
@@ -856,9 +859,12 @@ export default function App() {
                 <button onClick={() => setView('admin_requests')} className={`text-[11px] font-black uppercase tracking-widest ${view === 'admin_requests' ? 'text-[#ffb3a3] border-b-2 border-[#ffb3a3] pb-1' : 'text-gray-400'}`}>요청관리</button>
               )}
             </nav>
-            <button onClick={handleLogout} className="text-[10px] font-black text-gray-400 border border-gray-100 px-4 md:px-6 py-2 md:py-2.5 rounded-full flex items-center gap-2">
-              <Icons.Logout /> <span className="hidden sm:inline">로그아웃</span>
-            </button>
+            <div className="flex items-center gap-3 md:gap-5 border-l pl-4 md:pl-5 border-gray-100">
+              <span className="hidden lg:block text-[10px] font-black text-gray-300 truncate max-w-[150px]">{user?.email}</span>
+              <button onClick={handleLogout} className="text-[10px] font-black text-gray-400 border border-gray-100 px-4 md:px-6 py-2 md:py-2.5 rounded-full flex items-center gap-2 hover:bg-gray-50 transition-colors">
+                <Icons.Logout /> <span className="hidden sm:inline">로그아웃</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
