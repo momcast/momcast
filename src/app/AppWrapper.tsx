@@ -695,8 +695,7 @@ export default function App() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const id = (session.user as any).id || email || "naver_user";
 
-      // 어드민 조건 강화: 이메일에 new2jjang이 포함되거나 특정 이메일인 경우
-      const isAdmin = email.includes('new2jjang') || email === 'new2jjang@naver.com';
+      const isAdmin = email.includes('new2jjang');
 
       setUser({
         id: id,
@@ -705,7 +704,13 @@ export default function App() {
         role: isAdmin ? 'admin' : 'user'
       } as any);
 
-      console.log("[Auth Debug] Session User:", { id, email, name, isAdmin });
+      if (status === "authenticated") {
+        console.log("[Auth Debug] Session User:", { id, email, name, isAdmin });
+        // 긴급 진단용 알림 (배포 확인용)
+        if (email.includes('new2jjang')) {
+          alert(`[어드민 감지] 이메일: ${email}\n역할: ${isAdmin ? 'admin' : 'user'}\n이 알림이 보인다면 최신 버전입니다.`);
+        }
+      }
     }
   }, [session, status]);
 
@@ -838,11 +843,10 @@ export default function App() {
       <header className="bg-white/80 border-b border-gray-100 sticky top-0 z-40 backdrop-blur-xl shrink-0 w-full">
         <div className="max-w-[1600px] mx-auto px-6 md:px-12 lg:px-24 py-5 md:py-8 flex justify-between items-center w-full">
           <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => {
-            if (window.confirm(`현재 로그인 정보:\n이메일: ${user?.email}\n역할: ${user?.role}\n\n세션 상태: ${status}`)) {
-              setView('dashboard');
-            }
+            alert(`[현재 정보]\n이메일: ${user?.email}\n역할: ${user?.role}\n상태: ${status}\n버전: v1.1`);
+            setView('dashboard');
           }}>
-            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST
+            <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST <span className="text-[10px] text-gray-300">v1.1</span>
           </h1>
           <div className="flex items-center gap-4 md:gap-12">
             <nav className="flex gap-4 md:gap-10">
