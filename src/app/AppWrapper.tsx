@@ -691,14 +691,21 @@ export default function App() {
     if (status === "authenticated" && session?.user) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const email = ((session.user as any).email || "").toLowerCase();
+      const name = session.user.name || "네이버 사용자";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const id = (session.user as any).id || email || "naver_user";
+
+      // 어드민 조건 강화: 이메일에 new2jjang이 포함되거나 특정 이메일인 경우
+      const isAdmin = email.includes('new2jjang') || email === 'new2jjang@naver.com';
+
       setUser({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        id: (session.user as any).id || email || "naver_user",
+        id: id,
         email: email,
-        name: session.user.name || "네이버 사용자",
-        role: email === 'new2jjang@naver.com' ? 'admin' : 'user'
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        name: name,
+        role: isAdmin ? 'admin' : 'user'
       } as any);
+
+      console.log("[Auth Debug] Session User:", { id, email, name, isAdmin });
     }
   }, [session, status]);
 
@@ -830,7 +837,11 @@ export default function App() {
     <div className="min-h-screen bg-gray-50 flex flex-col font-['Noto_Sans_KR'] text-gray-900 w-full overflow-x-hidden">
       <header className="bg-white/80 border-b border-gray-100 sticky top-0 z-40 backdrop-blur-xl shrink-0 w-full">
         <div className="max-w-[1600px] mx-auto px-6 md:px-12 lg:px-24 py-5 md:py-8 flex justify-between items-center w-full">
-          <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => setView('dashboard')}>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tighter cursor-pointer flex items-center gap-3 group" onClick={() => {
+            if (window.confirm(`현재 로그인 정보:\n이메일: ${user?.email}\n역할: ${user?.role}\n\n세션 상태: ${status}`)) {
+              setView('dashboard');
+            }
+          }}>
             <img src="/momcast_logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover" /> MOMCAST
           </h1>
           <div className="flex items-center gap-4 md:gap-12">
