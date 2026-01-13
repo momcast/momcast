@@ -21,35 +21,14 @@ declare module "next-auth/jwt" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    debug: true, // Enable debug mode to see detailed error messages
     trustHost: true, // Trust the host header (required for Vercel)
     providers: [
         NaverProvider({
             clientId: process.env.AUTH_NAVER_ID,
             clientSecret: process.env.AUTH_NAVER_SECRET,
-            // Disable PKCE check to avoid cookie parsing issues in Vercel
-            checks: ["state"],
         }),
     ],
-    // Explicitly configure cookies for better compatibility with Vercel
-    cookies: {
-        pkceCodeVerifier: {
-            name: "authjs.pkce.code_verifier",
-            options: {
-                httpOnly: true,
-                sameSite: "lax",
-                path: "/",
-                secure: process.env.NODE_ENV === "production",
-            },
-        },
-    },
-    // Use secure cookies in production
-    useSecureCookies: process.env.NODE_ENV === "production",
-    // Allow automatic account linking for OAuth providers
-    // This is needed because we're using a custom email format (naver_{id}@auth.local)
     callbacks: {
-        // Removed signIn callback to allow NextAuth to handle authentication automatically
-        // Supabase sync will be handled separately after successful login
         async jwt({ token, user }) {
             const t = token as JWT;
             if (user) {
@@ -63,8 +42,5 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
             return session;
         },
-    },
-    pages: {
-        signIn: "/login",
     },
 })
