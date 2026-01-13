@@ -27,6 +27,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         NaverProvider({
             clientId: process.env.AUTH_NAVER_ID,
             clientSecret: process.env.AUTH_NAVER_SECRET,
+            // Disable PKCE check to avoid cookie parsing issues in Vercel
+            checks: ["state"],
         }),
     ],
     // Explicitly configure cookies for better compatibility with Vercel
