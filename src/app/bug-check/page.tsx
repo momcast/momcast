@@ -1,10 +1,9 @@
 
 export default function BugCheckPage() {
     const envStatus = {
-        AUTH_SECRET: process.env.AUTH_SECRET ? `OK (Len: ${process.env.AUTH_SECRET.length})` : 'MISSING (!!!)',
-        // SECURITY SENSITIVE: Showing full keys for user verification. Delete page after use.
-        AUTH_NAVER_ID: process.env.AUTH_NAVER_ID ? `OK (${process.env.AUTH_NAVER_ID})` : 'MISSING (!!!)',
-        AUTH_NAVER_SECRET: process.env.AUTH_NAVER_SECRET ? `OK (${process.env.AUTH_NAVER_SECRET})` : 'MISSING (!!!)',
+        AUTH_SECRET: process.env.AUTH_SECRET ? 'OK (Exists)' : 'MISSING (!!!)',
+        AUTH_NAVER_ID: process.env.AUTH_NAVER_ID ? 'OK (Exists)' : 'MISSING (!!!)',
+        AUTH_NAVER_SECRET: process.env.AUTH_NAVER_SECRET ? 'OK (Exists)' : 'MISSING (!!!)',
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ? 'OK (Exists)' : 'MISSING (!!!)',
         NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL ? 'OK (Exists)' : 'MISSING (!!!)',
     };
