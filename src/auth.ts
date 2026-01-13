@@ -28,43 +28,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         NaverProvider({
             clientId: process.env.AUTH_NAVER_ID,
             clientSecret: process.env.AUTH_NAVER_SECRET,
-            allowDangerousEmailAccountLinking: true, // Allow OAuth account linking
         }),
     ],
+    // Allow automatic account linking for OAuth providers
+    // This is needed because we're using a custom email format (naver_{id}@auth.local)
     callbacks: {
-        async signIn({ user, account, profile }) {
-            if (account?.provider === "naver") {
-                try {
-                    const naverId = profile?.id as string;
-                    if (!naverId) {
-                        console.error("Naver ID not found in profile");
-                        return false;
-                    }
-
-                    // Try to sync with Supabase, but don't block login if it fails
-                    const supabaseUser = await findOrCreateUser(
-                        naverId,
-                        user.email || undefined,
-                        user.name || undefined
-                    );
-
-                    if (supabaseUser) {
-                        user.supabase_uid = supabaseUser.id;
-                        console.log("Supabase sync successful:", supabaseUser.id);
-                    } else {
-                        console.warn("Supabase sync failed, but allowing login to proceed");
-                    }
-
-                    return true;
-                } catch (error) {
-                    console.error("Error syncing user to Supabase:", error);
-                    // Allow login even if Supabase sync fails
-                    console.warn("Allowing login despite Supabase error");
-                    return true;
-                }
-            }
-            return true;
-        },
+        // Removed signIn callback to allow NextAuth to handle authentication automatically
+        // Supabase sync will be handled separately after successful login
         async jwt({ token, user }) {
             const t = token as JWT;
             if (user) {
