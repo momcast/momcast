@@ -1,7 +1,6 @@
 import NextAuth, { type DefaultSession, type User } from "next-auth"
 import type { JWT } from "next-auth/jwt"
 import NaverProvider from "next-auth/providers/naver"
-import { findOrCreateUser } from "@/lib/supabase-admin"
 
 declare module "next-auth" {
     interface Session {
@@ -30,6 +29,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientSecret: process.env.AUTH_NAVER_SECRET,
         }),
     ],
+    // Explicitly configure cookies for better compatibility with Vercel
+    cookies: {
+        pkceCodeVerifier: {
+            name: "authjs.pkce.code_verifier",
+            options: {
+                httpOnly: true,
+                sameSite: "lax",
+                path: "/",
+                secure: process.env.NODE_ENV === "production",
+            },
+        },
+    },
+    // Use secure cookies in production
+    useSecureCookies: process.env.NODE_ENV === "production",
     // Allow automatic account linking for OAuth providers
     // This is needed because we're using a custom email format (naver_{id}@auth.local)
     callbacks: {
