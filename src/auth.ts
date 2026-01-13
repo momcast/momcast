@@ -33,22 +33,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (account?.provider === "naver") {
                 try {
                     const naverId = profile?.id as string;
-                    if (!naverId) return false;
+                    if (!naverId) {
+                        console.error("Naver ID not found in profile");
+                        return false;
+                    }
 
+                    // Try to sync with Supabase, but don't block login if it fails
                     const supabaseUser = await findOrCreateUser(
                         naverId,
                         user.email || undefined,
                         user.name || undefined
                     );
-                    if (!supabaseUser) return false;
 
-                    // Store Supabase ID in the user object for the jwt callback
-                    // Semicolon before ( is critical in TS if the previous line is an expression
-                    user.supabase_uid = supabaseUser.id;
+                    if (supabaseUser) {
+                        user.supabase_uid = supabaseUser.id;
+                        console.log("Supabase sync successful:", supabaseUser.id);
+                    } else {
+                        console.warn("Supabase sync failed, but allowing login to proceed");
+                    }
+
                     return true;
                 } catch (error) {
                     console.error("Error syncing user to Supabase:", error);
-                    return false;
+                    // Allow login even if Supabase sync fails
+                    console.warn("Allowing login despite Supabase error");
+                    return true;
                 }
             }
             return true;
