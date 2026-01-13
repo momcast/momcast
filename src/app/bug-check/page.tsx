@@ -11,7 +11,7 @@ export default function BugCheckPage() {
     return (
         <div style={{ padding: '50px', fontFamily: 'monospace' }}>
             <h1>Environment Variable Check</h1>
-            <p>If any of these say "MISSING", that is the cause of the 500 Error.</p>
+            <p>If any of these say 'MISSING', that is the cause of the 500 Error.</p>
 
             <div style={{ background: '#f0f0f0', padding: '20px', borderRadius: '8px' }}>
                 {Object.entries(envStatus).map(([key, status]) => (
