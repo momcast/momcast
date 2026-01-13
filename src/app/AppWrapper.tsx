@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { signUp, signIn, signOut, onAuthStateChange, signInWithNaver } from './authService'
+import { useSession } from "next-auth/react";
 import { saveUserRequest } from './dbService'
 import { uploadImage } from './firebase'
 import {
@@ -676,13 +677,30 @@ export default function App() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [emailAddress, setEmailAddress] = useState('');
 
-  // 인증 상태 리스너
+  const { data: session, status } = useSession();
+
+  // 인증 상태 리스너 (Supabase)
   useEffect(() => {
     const { data: { subscription } } = onAuthStateChange((profile) => {
-      setUser(profile);
+      if (profile) setUser(profile);
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // NextAuth 세션 동기화 (Naver 등)
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      setUser({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        id: (session.user as any).id || (session.user as any).email || "naver_user",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        email: (session.user as any).email || "",
+        name: session.user.name || "네이버 사용자",
+        role: 'user'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+    }
+  }, [session, status]);
 
   // 템플릿 로드
   useEffect(() => {
