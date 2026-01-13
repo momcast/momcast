@@ -1,5 +1,5 @@
 import { supabase, type Project } from './supabaseClient'
-import type { UserRequest, AdminScene, UserScene } from './types'
+import type { UserRequest, AdminScene, UserScene, Template } from './types'
 
 export const saveUserRequest = async (request: {
     project_id: string,
@@ -83,6 +83,69 @@ export const saveProject = async (project: Project) => {
         if (error) throw error;
     } catch (error) {
         console.error("Error saving project:", error);
+        throw error;
+    }
+};
+
+/**
+ * 모든 템플릿 가져오기 (관리자가 생성한 모든 템플릿을 일반 유저에게 공유)
+ */
+export const getTemplates = async (): Promise<Template[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('templates')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map(t => ({
+            id: t.id,
+            name: t.name,
+            sceneCount: t.scene_count || t.scenes?.length || 0,
+            scenes: t.scenes,
+            created_at: t.created_at
+        }));
+    } catch (error) {
+        console.error("Error fetching templates from Supabase:", error);
+        return [];
+    }
+};
+
+/**
+ * 템플릿 저장 (관리자용)
+ */
+export const saveTemplate = async (template: Template) => {
+    try {
+        const { error } = await supabase
+            .from('templates')
+            .upsert({
+                id: template.id,
+                name: template.name,
+                scene_count: template.scenes.length,
+                scenes: template.scenes,
+                created_at: template.created_at
+            });
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error saving template to Supabase:", error);
+        throw error;
+    }
+};
+
+/**
+ * 템플릿 삭제 (관리자용)
+ */
+export const deleteTemplate = async (id: string) => {
+    try {
+        const { error } = await supabase
+            .from('templates')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error deleting template from Supabase:", error);
         throw error;
     }
 };

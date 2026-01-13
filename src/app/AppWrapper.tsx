@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, onAuthStateChange, signInWithNaver } from './authService'
 import { useSession } from "next-auth/react";
-import { saveUserRequest } from './dbService'
+import { getTemplates, saveTemplate, deleteTemplate, saveUserRequest } from './dbService'
 import { uploadImage } from './firebase'
 import {
   type UserProfile,
@@ -714,10 +714,9 @@ export default function App() {
     }
   }, [session, status]);
 
-  // 템플릿 로드
+  // 템플릿 로드 (Supabase에서 실시간 조회)
   useEffect(() => {
-    const saved = localStorage.getItem('momcast_templates');
-    if (saved) setTemplates(JSON.parse(saved));
+    getTemplates().then(setTemplates);
   }, []);
 
   // 사용자 프로젝트 로드 (만료 시간 체크 및 유효성 검사)
@@ -767,11 +766,12 @@ export default function App() {
       });
       setActiveProject(null);
     } else if (activeTemplate) {
-      setTemplates((prev: Template[]) => {
-        const filtered = prev.filter(t => t.id !== activeTemplate.id);
-        const next = [activeTemplate, ...filtered];
-        localStorage.setItem('momcast_templates', JSON.stringify(next));
-        return next;
+      saveTemplate(activeTemplate).then(() => {
+        setTemplates((prev: Template[]) => {
+          const filtered = prev.filter(t => t.id !== activeTemplate.id);
+          const next = [activeTemplate, ...filtered];
+          return next;
+        });
       });
       setActiveTemplate(null);
     }
@@ -779,23 +779,30 @@ export default function App() {
   };
 
   // [명예 회복] 템플릿 삭제 및 연쇄 삭제 로직
-  const handleDeleteTemplate = (id: string) => {
+  const handleDeleteTemplate = async (id: string) => {
     if (!window.confirm('정말 이 템플릿을 삭제하시겠습니까? 관련 모든 데이터가 즉시 소멸됩니다.')) return;
 
-    // 1. 즉시 템플릿 상태 갱신 (참조 무결성 보장)
-    const nextTemplates = templates.filter(t => t.id !== id);
-    setTemplates(nextTemplates);
-    localStorage.setItem('momcast_templates', JSON.stringify(nextTemplates));
+    try {
+      // 1. Supabase 서버에서 삭제
+      await deleteTemplate(id);
 
-    // 2. 관련 사용자 프로젝트(게시물) 즉시 파괴
-    if (user) {
-      const nextProjects = userProjects.filter(p => p.templateId !== id);
-      setUserProjects(nextProjects);
-      localStorage.setItem(`momcast_projects_${user.id}`, JSON.stringify(nextProjects));
+      // 2. 상태 갱신
+      const nextTemplates = templates.filter(t => t.id !== id);
+      setTemplates(nextTemplates);
+
+      // 3. 관련 사용자 프로젝트(게시물) 즉시 파괴 (공유 템플릿 삭제 시 로컬 캐시 정리)
+      if (user) {
+        const nextProjects = userProjects.filter(p => p.templateId !== id);
+        setUserProjects(nextProjects);
+        localStorage.setItem(`momcast_projects_${user.id}`, JSON.stringify(nextProjects));
+      }
+
+      if (activeTemplate?.id === id) setActiveTemplate(null);
+      console.log(`[Admin] Template ${id} permanently deleted.`);
+    } catch (error) {
+      alert('템플릿 삭제 중 오류가 발생했습니다.');
+      console.error(error);
     }
-
-    if (activeTemplate?.id === id) setActiveTemplate(null);
-    console.log(`[Admin] Template ${id} permanently deleted.`);
   };
 
   const handleDeleteProject = (id: string) => {
