@@ -22,6 +22,7 @@ export interface Project {
     template_id: string
     name: string
     scenes: unknown[]
+    status?: string
     expires_at: string
     created_at?: string
 }
