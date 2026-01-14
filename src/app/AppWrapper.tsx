@@ -298,6 +298,7 @@ const SceneEditor: React.FC<{
 }> = ({ adminScene, userScene, isAdminMode, onClose, onSave }) => {
   const [currentScene, setCurrentScene] = useState<AdminScene | UserScene>(() => {
     const base: AdminScene | UserScene = isAdminMode ? adminScene : userScene;
+
     return {
       ...base,
       position: base.position || { x: 0, y: 0 },
@@ -307,7 +308,13 @@ const SceneEditor: React.FC<{
       backgroundColor: base.backgroundColor || '#ffffff',
       cropRect: base.cropRect || { top: 0, left: 0, right: 0, bottom: 0 },
       stickers: base.stickers || [],
-      drawings: base.drawings || []
+      drawings: base.drawings || [],
+      // 독립적 권한 초기값 (없으면 기본값 true)
+      ...(isAdminMode ? {
+        allowUserUpload: (base as AdminScene).allowUserUpload ?? true,
+        allowUserDecorate: (base as AdminScene).allowUserDecorate ?? true,
+        allowUserText: (base as AdminScene).allowUserText ?? true,
+      } : {})
     };
   });
 
@@ -325,6 +332,11 @@ const SceneEditor: React.FC<{
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [isUploading, setIsUploading] = useState(false);
+
+  // 권한 체크 헬퍼
+  const canUpload = isAdminMode || adminScene.allowUserUpload !== false;
+  const canDecorate = isAdminMode || adminScene.allowUserDecorate !== false;
+  const canEditText = isAdminMode || adminScene.allowUserText !== false;
 
 
   const startCamera = async () => {
@@ -566,19 +578,42 @@ const SceneEditor: React.FC<{
 
         <aside className="flex-1 md:w-[420px] bg-white border-l border-gray-100 flex flex-col min-h-0 shrink-0 relative overflow-hidden">
           <div className="flex bg-gray-100 p-2 m-4 md:m-6 rounded-2xl shadow-inner border border-gray-50 shrink-0">
-            <button onClick={() => { setMode('edit'); setIsCropMode(false); }} className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'edit' && !isCropMode ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}>사진 편집</button>
-            <button onClick={() => { setMode('decorate'); setIsCropMode(false); }} className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'decorate' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}>꾸미기</button>
+            <button
+              onClick={() => { setMode('edit'); setIsCropMode(false); }}
+              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'edit' && !isCropMode ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}
+            >
+              사진 편집
+            </button>
+            <button
+              onClick={() => {
+                if (canDecorate) {
+                  setMode('decorate');
+                  setIsCropMode(false);
+                } else {
+                  alert("이 장면은 유저 꾸미기가 제한되어 있습니다.");
+                }
+              }}
+              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'decorate' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'} ${!canDecorate ? 'opacity-30 cursor-not-allowed' : ''}`}
+            >
+              꾸미기 {!canDecorate && '🔒'}
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-32">
             {mode === 'edit' && (
               <div className="space-y-8">
-                <div className="grid grid-cols-2 gap-4">
-                  <button onClick={() => fileInputRef.current?.click()} className="py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-                    <Icons.Change /> {isAdminMode ? '오버레이 교체' : '사진 교체'}
-                  </button>
-                  <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
-                </div>
+                {canUpload ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => fileInputRef.current?.click()} className="py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+                      <Icons.Change /> {isAdminMode ? '오버레이 교체' : '사진 교체'}
+                    </button>
+                    <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
+                  </div>
+                ) : (
+                  <div className="p-6 bg-red-50 border border-red-100 rounded-2xl text-center">
+                    <p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-relaxed">이 장면은 관리자 설정에 의해<br />이미지 업로드가 제한되었습니다 🔒</p>
+                  </div>
+                )}
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
                 <div className="space-y-6">
                   <div className="space-y-4">
@@ -638,15 +673,58 @@ const SceneEditor: React.FC<{
               </div>
             )}
 
+            {isAdminMode && (
+              <div className="space-y-4 border-t pt-8 border-gray-100">
+                <span className="text-[10px] font-black uppercase text-[#ffb3a3] tracking-widest">유저 권한 설정 (어드민 전용)</span>
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { key: 'allowUserUpload', label: '사진 업로드 허용', icon: <Icons.Change /> },
+                    { key: 'allowUserDecorate', label: '꾸미기(스티커 등) 허용', icon: <Icons.Change /> },
+                    { key: 'allowUserText', label: '문구 작성 허용', icon: <Icons.Edit /> }
+                  ].map((p) => {
+                    // isAdminMode일 때만 이 UI가 노출되므로 AdminScene으로 확신할 수 있음
+                    const scene = currentScene as AdminScene;
+                    const isAllowed = scene[p.key as keyof AdminScene] ?? true;
+                    return (
+                      <button
+                        key={p.key}
+                        onClick={() => setCurrentScene((prev) => {
+                          const adminPrev = prev as AdminScene;
+                          const key = p.key as keyof AdminScene;
+                          return { ...prev, [key]: !adminPrev[key] };
+                        })}
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isAllowed ? 'bg-white border-gray-100 text-gray-900' : 'bg-gray-50 border-transparent text-gray-400 opacity-60'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="scale-75 opacity-50">{p.icon}</span>
+                          <span className="text-[10px] font-black uppercase">{p.label}</span>
+                        </div>
+                        <div className={`w-10 h-6 rounded-full relative transition-all ${isAllowed ? 'bg-[#03C75A]' : 'bg-gray-200'}`}>
+                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isAllowed ? 'left-5' : 'left-1'}`} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-4 border-t pt-8 border-gray-100">
               <div className="flex justify-between items-center">
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">문구작성</span>
+                <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                  문구작성 {!canEditText && '🔒'}
+                </span>
               </div>
               <textarea
-                className="w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner"
+                className={`w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner ${!canEditText ? 'opacity-50 cursor-not-allowed' : ''}`}
                 value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }))}
-                placeholder="오늘의 소중한 순간을 기록해보세요..."
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                  if (canEditText) {
+                    setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }));
+                  }
+                }}
+                disabled={!canEditText}
+                placeholder={canEditText ? "오늘의 소중한 순간을 기록해보세요..." : "이 장면은 문구 수정이 제한되어 있습니다."}
               />
             </div>
           </div>
@@ -1167,7 +1245,31 @@ export default function App() {
                 </div>
               ))}
               {isAdminMode && (
-                <button onClick={() => setActiveTemplate(prev => prev ? { ...prev, scenes: [...prev.scenes, { id: `sc_${Date.now()}`, defaultContent: '', stickers: [], drawings: [], position: { x: 0, y: 0 }, zoom: 1, rotation: 0, backgroundMode: 'transparent', backgroundColor: '#ffffff', cropRect: { top: 0, right: 0, bottom: 0, left: 0 } }] } : null)} className="aspect-[4/3] bg-gray-50 border-4 border-dashed border-gray-200 rounded-[2.5rem] flex flex-col items-center justify-center text-gray-300 hover:text-gray-900 transition-all group shadow-sm w-full z-10"><Icons.Plus /><span className="text-[10px] font-black mt-3 uppercase tracking-widest">장면 추가</span></button>
+                <button
+                  onClick={() => setActiveTemplate(prev => prev ? {
+                    ...prev,
+                    scenes: [...prev.scenes, {
+                      id: `sc_${Date.now()}`,
+                      defaultContent: '',
+                      stickers: [],
+                      drawings: [],
+                      position: { x: 0, y: 0 },
+                      zoom: 1,
+                      rotation: 0,
+                      backgroundMode: 'transparent',
+                      backgroundColor: '#ffffff',
+                      cropRect: { top: 0, right: 0, bottom: 0, left: 0 },
+                      // 장면 추가 시 기본값은 모두 허용
+                      allowUserUpload: true,
+                      allowUserDecorate: true,
+                      allowUserText: true
+                    }]
+                  } : null)}
+                  className="aspect-[4/3] bg-gray-50 border-4 border-dashed border-gray-200 rounded-[2.5rem] flex flex-col items-center justify-center text-gray-300 hover:text-gray-900 transition-all group shadow-sm w-full z-10"
+                >
+                  <Icons.Plus />
+                  <span className="text-[10px] font-black mt-3 uppercase tracking-widest">장면 추가</span>
+                </button>
               )}
             </div>
           </div>

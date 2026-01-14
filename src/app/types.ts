@@ -45,6 +45,9 @@ export interface BaseScene {
 export interface AdminScene extends BaseScene {
   overlayUrl?: string;
   defaultContent: string;
+  allowUserUpload?: boolean;   // 사진 업로드 허용 여부
+  allowUserDecorate?: boolean; // 꾸미기(스티커/그리기) 허용 여부
+  allowUserText?: boolean;     // 문구 작성 허용 여부
 }
 
 // 템플릿 정보
