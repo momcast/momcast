@@ -812,8 +812,12 @@ export default function App() {
   // 어드민 요청 로드
   useEffect(() => {
     if (user?.role === 'admin' && view === 'admin_requests') {
+      console.log('🛡️ Admin Mode Detected: Fetching requests...');
       import('./dbService').then(service => {
-        service.getAdminRequests().then(requests => setAdminRequests(requests));
+        service.getAdminRequests().then(requests => {
+          console.log(`✅ Loaded ${requests?.length || 0} admin requests.`);
+          setAdminRequests(requests);
+        });
       });
     }
   }, [user, view]);
@@ -1469,6 +1473,7 @@ export default function App() {
 
                     // 시안 요청인 경우 구글 드라이브 동기화 실행 (백그라운드)
                     if (requestModal.type === 'draft') {
+                      console.log('📤 Triggering G-Drive Sync for request:', requestId);
                       fetch('/api/gdrive/sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1483,8 +1488,8 @@ export default function App() {
                           }
                         })
                       }).then(res => res.json())
-                        .then(data => console.log('G-Drive Sync:', data))
-                        .catch(err => console.error('G-Drive Sync Failed:', err));
+                        .then(data => console.log('✅ G-Drive Sync Response:', data))
+                        .catch(err => console.error('❌ G-Drive Sync Failed:', err));
                     }
 
                     alert('요청이 성공적으로 접수되었습니다!');

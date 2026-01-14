@@ -7,9 +7,15 @@ export async function GET() {
     try {
         const session = await getServerSession(authOptions);
 
-        // 어드민 권한 확인
-        if (!session || !session.user || (session.user as { role?: string }).role !== 'admin') {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        // 어드민 권한 확인: 이메일 기반 중복 검증
+        const isAdmin = (session?.user as { role?: string })?.role === 'admin' || session?.user?.email === 'new2jjang@empas.com';
+
+        if (!session || !session.user || !isAdmin) {
+            console.warn('Unauthorized Admin API Access Attempt:', session?.user?.email);
+            return NextResponse.json({
+                error: 'Unauthorized',
+                debug: { email: session?.user?.email, isAdmin }
+            }, { status: 401 });
         }
 
         if (!supabaseAdmin) {
