@@ -23,6 +23,13 @@ export async function GET() {
         }
 
         // Fetch requests with project details and user profile using admin client
+        // [TIP] 조인 과정에서 데이터가 누락되는지 확인하기 위해 count 우선 확인
+        const { count, error: countError } = await supabaseAdmin
+            .from('requests')
+            .select('*', { count: 'exact', head: true });
+
+        console.log('Admin List RAW Count:', count, countError);
+
         const { data, error } = await supabaseAdmin
             .from('requests')
             .select(`
@@ -35,6 +42,16 @@ export async function GET() {
         if (error) {
             console.error('Supabase Admin Fetch Error:', error);
             return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+
+        console.log(`Admin List Data Fetched: ${data?.length || 0} items`);
+        if (data && data.length > 0) {
+            console.log('Sample Item Joins:', {
+                hasProject: !!data[0].projects,
+                hasProfile: !!data[0].profiles,
+                projectId: data[0].project_id,
+                userId: data[0].user_id
+            });
         }
 
         return NextResponse.json(data);

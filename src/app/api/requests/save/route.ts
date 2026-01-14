@@ -29,6 +29,18 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
         }
 
+        // [추가] 프로필 정보 동기화 (네이버 등 소셜 로그인 유저를 위해)
+        // 향후 어드민 목록에서 이름/이메일을 조인할 때 필수입니다.
+        const userId = (session.user as { id?: string }).id;
+        await supabaseAdmin
+            .from('profiles')
+            .upsert({
+                id: userId,
+                email: session.user.email,
+                name: session.user.name || session.user.email?.split('@')[0],
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+
         // requests 테이블에 삽입
         const { data, error } = await supabaseAdmin
             .from('requests')
