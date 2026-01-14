@@ -1,6 +1,9 @@
-import { supabase, type Project } from './supabaseClient'
+import { type Project } from './supabaseClient'
 import type { UserRequest, Template, UserProject } from './types'
 
+/**
+ * 시안/최종 요청 저장
+ */
 export const saveUserRequest = async (request: {
     project_id: string,
     user_id: string,
@@ -29,6 +32,9 @@ export const saveUserRequest = async (request: {
     }
 };
 
+/**
+ * 어드민용 모든 요청 목록 가져오기
+ */
 export const getAdminRequests = async (): Promise<UserRequest[]> => {
     try {
         const response = await fetch('/api/requests/list');
@@ -39,18 +45,7 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
 
         const data = await response.json();
 
-        return (data || []).map((req: {
-            id: string,
-            project_id: string,
-            user_id: string,
-            type: 'draft' | 'final',
-            status: 'pending' | 'processing' | 'completed',
-            contact_info: string,
-            result_url?: string,
-            created_at: string,
-            projects?: { name: string, scenes: unknown[] } | null,
-            profiles?: { name: string | null, email: string | null } | null
-        }) => ({
+        return (data || []).map((req: any) => ({
             id: req.id,
             projectId: req.project_id,
             projectName: req.projects?.name || 'Unknown Project',
@@ -69,28 +64,23 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
     }
 };
 
+/**
+ * 사용자 본인의 요청 목록 가져오기
+ */
 export const getUserRequests = async (userId: string): Promise<UserRequest[]> => {
     try {
-        const { data, error } = await supabase
-            .from('requests')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        const response = await fetch('/api/requests/user');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch user requests');
+        }
 
-        if (error) throw error;
-        return (data || []).map((req: {
-            id: string,
-            project_id: string,
-            user_id: string,
-            type: 'draft' | 'final',
-            status: 'pending' | 'processing' | 'completed',
-            contact_info: string,
-            result_url?: string,
-            created_at: string
-        }) => ({
+        const data = await response.json();
+
+        return (data || []).map((req: any) => ({
             id: req.id,
             projectId: req.project_id,
-            projectName: '', // Will be filled if needed or use item link
+            projectName: req.projects?.name || 'Unknown Project',
             userId: req.user_id,
             userName: '',
             type: req.type,
@@ -101,13 +91,14 @@ export const getUserRequests = async (userId: string): Promise<UserRequest[]> =>
             userScenes: []
         }));
     } catch (error) {
-        console.error("Error fetching user requests:", error);
+        console.error("Error fetching user requests via API:", error);
         return [];
     }
 };
 
-
-// Function to save/update a project
+/**
+ * 프로젝트 저장/업데이트 (본인 데이터)
+ */
 export const saveProject = async (project: Project) => {
     try {
         const response = await fetch('/api/projects/save', {
@@ -126,17 +117,20 @@ export const saveProject = async (project: Project) => {
     }
 };
 
-// 사용자 프로젝트 목록 가져오기
+/**
+ * 사용자 본인의 프로젝트 목록 가져오기
+ */
 export const getUserProjects = async (userId: string): Promise<UserProject[]> => {
     try {
-        const { data, error } = await supabase
-            .from('projects')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
+        const response = await fetch('/api/projects/user');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch user projects');
+        }
 
-        if (error) throw error;
-        return (data || []).map(p => ({
+        const data = await response.json();
+
+        return (data || []).map((p: any) => ({
             id: p.id,
             templateId: p.template_id,
             userId: p.user_id,
@@ -147,38 +141,46 @@ export const getUserProjects = async (userId: string): Promise<UserProject[]> =>
             expires_at: p.expires_at
         }));
     } catch (error) {
-        console.error("Error fetching user projects:", error);
+        console.error("Error fetching user projects via API:", error);
         return [];
     }
 };
 
-// 요청 상태 업데이트 및 결과물 등록 (어드민용)
+/**
+ * 요청 상태 업데이트 및 결과물 등록 (어드민용)
+ */
 export const updateRequestStatus = async (requestId: string, status: 'pending' | 'processing' | 'completed', resultUrl?: string) => {
     try {
-        const { error } = await supabase
-            .from('requests')
-            .update({ status, result_url: resultUrl })
-            .eq('id', requestId);
+        const response = await fetch('/api/requests/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId, status, resultUrl })
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update status');
+        }
     } catch (error) {
-        console.error("Error updating request status:", error);
+        console.error("Error updating request status via API:", error);
         throw error;
     }
 };
 
 /**
- * 모든 템플릿 가져오기 (관리자가 생성한 모든 템플릿을 일반 유저에게 공유)
+ * 모든 템플릿 목록 가져오기
  */
 export const getTemplates = async (): Promise<Template[]> => {
     try {
-        const { data, error } = await supabase
-            .from('templates')
-            .select('*')
-            .order('created_at', { ascending: false });
+        const response = await fetch('/api/templates');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch templates');
+        }
 
-        if (error) throw error;
-        return (data || []).map(t => ({
+        const data = await response.json();
+
+        return (data || []).map((t: any) => ({
             id: t.id,
             name: t.name,
             sceneCount: t.scene_count || t.scenes?.length || 0,
@@ -186,49 +188,53 @@ export const getTemplates = async (): Promise<Template[]> => {
             created_at: t.created_at
         }));
     } catch (error) {
-        console.error("Error fetching templates from Supabase:", error);
+        console.error("Error fetching templates via API:", error);
         return [];
     }
 };
 
 /**
- * 템플릿 저장 (관리자용)
+ * 템플릿 저장 (어드민용)
  */
 export const saveTemplate = async (template: Template) => {
     try {
-        const { error } = await supabase
-            .from('templates')
-            .upsert({
-                id: template.id,
-                name: template.name,
-                scene_count: template.scenes.length,
-                scenes: template.scenes,
-                created_at: template.created_at
-            });
+        const response = await fetch('/api/templates/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(template)
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to save template');
+        }
     } catch (error) {
-        console.error("Error saving template to Supabase:", error);
+        console.error("Error saving template via API:", error);
         throw error;
     }
 };
 
 /**
- * 템플릿 삭제 (관리자용)
+ * 템플릿 삭제 (어드민용)
  */
 export const deleteTemplate = async (id: string) => {
     try {
-        const { error } = await supabase
-            .from('templates')
-            .delete()
-            .eq('id', id);
+        const response = await fetch('/api/templates/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete template');
+        }
     } catch (error) {
-        console.error("Error deleting template from Supabase:", error);
+        console.error("Error deleting template via API:", error);
         throw error;
     }
 };
+
 /**
  * 프로젝트 삭제
  */
