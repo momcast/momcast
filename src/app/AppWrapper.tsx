@@ -1211,7 +1211,7 @@ export default function App() {
                     {req.status !== 'completed' ? (
                       <div className="flex items-center gap-2">
                         <label className="cursor-pointer px-6 py-3 bg-[#ffb3a3] text-white rounded-full font-black text-[10px] uppercase shadow-md hover:scale-105 transition-all flex items-center gap-2">
-                          <Icons.Upload /> 결과 업로드
+                          <Icons.Upload /> 파일 업로드
                           <input
                             type="file"
                             className="hidden"
@@ -1234,6 +1234,26 @@ export default function App() {
                             }}
                           />
                         </label>
+                        <button
+                          onClick={async () => {
+                            const url = prompt('영상 또는 시안의 URL(Vimeo, G-Drive 등)을 입력해주세요:');
+                            if (!url) return;
+                            if (confirm(`${url} 링크를 등록하고 사용자에게 알림을 보낼까요?`)) {
+                              try {
+                                await updateRequestStatus(req.id, 'completed', url);
+                                await sendDraftCompletionNotification(req.contactInfo, req.projectName);
+                                alert('링크 등록 및 알림 전송이 완료되었습니다!');
+                                getAdminRequests().then(setAdminRequests);
+                              } catch (err) {
+                                console.error(err);
+                                alert('처리 중 오류가 발생했습니다.');
+                              }
+                            }
+                          }}
+                          className="px-6 py-3 bg-gray-900 text-white rounded-full font-black text-[10px] uppercase shadow-md hover:scale-105 transition-all"
+                        >
+                          링크 등록
+                        </button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -1398,7 +1418,7 @@ export default function App() {
                     const project = userProjects.find(p => p.id === requestModal.projectId);
                     if (!project || !user) return;
 
-                    await saveUserRequest({
+                    const requestId = await saveUserRequest({
                       project_id: project.id,
                       project_name: project.projectName,
                       user_id: user.id,
@@ -1406,6 +1426,21 @@ export default function App() {
                       contact_info: requestModal.type === 'draft' ? phoneNumber : emailAddress,
                       scenes: project.userScenes
                     });
+
+                    // 시안 요청인 경우 구글 드라이브 동기화 실행 (백그라운드)
+                    if (requestModal.type === 'draft') {
+                      fetch('/api/gdrive/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          projectName: project.projectName,
+                          requestId: requestId,
+                          scenes: project.userScenes
+                        })
+                      }).then(res => res.json())
+                        .then(data => console.log('G-Drive Sync:', data))
+                        .catch(err => console.error('G-Drive Sync Failed:', err));
+                    }
 
                     alert('요청이 성공적으로 접수되었습니다!');
                     setRequestModal({ type: null, projectId: null });
