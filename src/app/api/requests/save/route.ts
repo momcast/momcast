@@ -36,7 +36,14 @@ export async function POST(req: NextRequest) {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('Supabase Insert Error:', error);
+            return NextResponse.json({ error: error.message, details: error.details }, { status: 400 });
+        }
+
+        if (!insertedData) {
+            return NextResponse.json({ error: 'Failed to retrieve inserted request data' }, { status: 500 });
+        }
 
         return NextResponse.json({ success: true, id: insertedData.id });
     } catch (error: unknown) {
