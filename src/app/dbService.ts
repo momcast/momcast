@@ -31,30 +31,15 @@ export const saveUserRequest = async (request: {
 
 export const getAdminRequests = async (): Promise<UserRequest[]> => {
     try {
-        // Fetch requests with project details and user profile
-        const { data, error } = await supabase
-            .from('requests')
-            .select(`
-                *,
-                projects ( name, scenes ),
-                profiles ( name, email )
-            `)
-            .order('created_at', { ascending: false });
+        const response = await fetch('/api/requests/list');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch admin requests');
+        }
 
-        if (error) throw error;
+        const data = await response.json();
 
-        return (data || []).map((req: {
-            id: string,
-            project_id: string,
-            projects: { name: string, scenes: (AdminScene | UserScene)[] } | null,
-            user_id: string,
-            profiles: { name: string | null, email: string | null } | null,
-            type: 'draft' | 'final',
-            status: 'pending' | 'processing' | 'completed',
-            contact_info: string,
-            result_url?: string,
-            created_at: string
-        }) => ({
+        return (data || []).map((req: any) => ({
             id: req.id,
             projectId: req.project_id,
             projectName: req.projects?.name || 'Unknown Project',
@@ -68,7 +53,7 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
             userScenes: req.projects?.scenes || []
         }));
     } catch (error) {
-        console.error("Error fetching requests from Supabase:", error);
+        console.error("Error fetching admin requests via API:", error);
         return [];
     }
 };

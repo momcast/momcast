@@ -15,12 +15,19 @@ export const authOptions: NextAuthOptions = {
         async jwt({ token, user }): Promise<JWT> {
             if (user) {
                 token.id = user.id;
+                // 특정 이메일인 경우 어드민 권한 부여
+                if (user.email === 'new2jjang@empas.com') {
+                    token.role = 'admin';
+                } else {
+                    token.role = 'user';
+                }
             }
             return token;
         },
         async session({ session, token }): Promise<Session> {
             if (session.user) {
-                (session.user as { id?: string | number }).id = token.id as string;
+                (session.user as { id?: string | number, role?: string }).id = token.id as string;
+                (session.user as { id?: string | number, role?: string }).role = token.role as string;
             }
             return session;
         },

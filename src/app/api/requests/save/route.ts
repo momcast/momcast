@@ -12,11 +12,16 @@ export async function POST(req: NextRequest) {
 
         const requestData = await req.json();
 
+        // 필수 필드 검증
+        if (!requestData.project_id || !requestData.user_id || !requestData.type) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
         // 보안 확인: 본인의 요청이어야 함
-        const isOwner = requestData.user_id === (session.user as { id?: string }).id;
+        const currentUserId = (session.user as { id?: string }).id;
         const isAdmin = (session.user as { role?: string }).role === 'admin';
 
-        if (!isOwner && !isAdmin) {
+        if (requestData.user_id !== currentUserId && !isAdmin) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
 
@@ -24,28 +29,32 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
         }
 
-        const { data: insertedData, error } = await supabaseAdmin
+        // requests 테이블에 삽입
+        const { data, error } = await supabaseAdmin
             .from('requests')
             .insert({
                 project_id: requestData.project_id,
                 user_id: requestData.user_id,
                 type: requestData.type,
-                contact_info: requestData.contact_info,
+                contact_info: requestData.contact_info || '',
                 status: 'pending'
             })
-            .select()
-            .single();
+            .select();
 
         if (error) {
             console.error('Supabase Insert Error:', error);
-            return NextResponse.json({ error: error.message, details: error.details }, { status: 400 });
+            return NextResponse.json({
+                error: '데이터베이스 저장 실패',
+                message: error.message,
+                details: error.details
+            }, { status: 400 });
         }
 
-        if (!insertedData) {
-            return NextResponse.json({ error: 'Failed to retrieve inserted request data' }, { status: 500 });
+        if (!data || data.length === 0) {
+            return NextResponse.json({ error: '생성된 요청 데이터를 찾을 수 없습니다.' }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, id: insertedData.id });
+        return NextResponse.json({ success: true, id: data[0].id });
     } catch (error: unknown) {
         console.error('API Save Request Error:', error);
         const message = error instanceof Error ? error.message : 'Internal Server Error';
