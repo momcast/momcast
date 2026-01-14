@@ -30,16 +30,27 @@ export async function POST(req: NextRequest) {
         }
 
         // [추가] 프로필 정보 동기화 (네이버 등 소셜 로그인 유저를 위해)
-        // 향후 어드민 목록에서 이름/이메일을 조인할 때 필수입니다.
+        // [추가] 프로필 정보 동기화 (Foreign Key 제약 조건 위반 방지)
         const userId = (session.user as { id?: string }).id;
-        await supabaseAdmin
-            .from('profiles')
-            .upsert({
-                id: userId,
-                email: session.user.email,
-                name: session.user.name || session.user.email?.split('@')[0],
-                updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
+        try {
+            const { error: profileError } = await supabaseAdmin
+                .from('profiles')
+                .upsert({
+                    id: userId,
+                    email: session.user.email,
+                    name: session.user.name || session.user.email?.split('@')[0]
+                }, { onConflict: 'id' });
+
+            if (profileError) {
+                console.error('Profile Sync Error:', profileError);
+                return NextResponse.json({
+                    error: '사용자 프로필 생성을 실패했습니다.',
+                    message: profileError.message
+                }, { status: 400 });
+            }
+        } catch (e: unknown) {
+            console.error('Profile Sync Fatal Error:', e);
+        }
 
         // requests 테이블에 삽입
         const { data, error } = await supabaseAdmin

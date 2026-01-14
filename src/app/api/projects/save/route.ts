@@ -29,13 +29,11 @@ export async function POST(req: NextRequest) {
                 .upsert({
                     id: userId,
                     email: session.user.email,
-                    name: session.user.name || session.user.email?.split('@')[0],
-                    updated_at: new Date().toISOString()
+                    name: session.user.name || session.user.email?.split('@')[0]
                 }, { onConflict: 'id' });
 
             if (profileError) {
                 console.error('Profile Sync Error:', profileError);
-                // 프로필 생성 실패 시 프로젝트 저장도 실패할 가능성이 높으므로 중단
                 return NextResponse.json({
                     error: '사용자 프로필 생성을 실패했습니다.',
                     message: profileError.message

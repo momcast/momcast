@@ -21,7 +21,7 @@ export const saveUserRequest = async (request: {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to save request');
+            throw new Error(`${errorData.error}${errorData.message ? ': ' + errorData.message : ''}`);
         }
 
         const data = await response.json();
@@ -130,7 +130,7 @@ export const saveProject = async (project: Project) => {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to save project');
+            throw new Error(`${errorData.error}${errorData.message ? ': ' + errorData.message : ''}`);
         }
     } catch (error) {
         console.error("Error saving project via API:", error);
