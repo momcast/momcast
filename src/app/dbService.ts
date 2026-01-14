@@ -10,22 +10,21 @@ export const saveUserRequest = async (request: {
     scenes?: unknown[]
 }) => {
     try {
-        const { data, error } = await supabase
-            .from('requests')
-            .insert({
-                project_id: request.project_id,
-                user_id: request.user_id,
-                type: request.type,
-                contact_info: request.contact_info,
-                status: 'pending'
-            })
-            .select()
-            .single();
+        const response = await fetch('/api/requests/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request)
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to save request');
+        }
+
+        const data = await response.json();
         return data.id;
     } catch (error) {
-        console.error("Error saving request to Supabase:", error);
+        console.error("Error saving request via API:", error);
         throw error;
     }
 };
@@ -115,13 +114,18 @@ export const getUserRequests = async (userId: string): Promise<UserRequest[]> =>
 // Function to save/update a project
 export const saveProject = async (project: Project) => {
     try {
-        const { error } = await supabase
-            .from('projects')
-            .upsert(project);
+        const response = await fetch('/api/projects/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(project)
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to save project');
+        }
     } catch (error) {
-        console.error("Error saving project:", error);
+        console.error("Error saving project via API:", error);
         throw error;
     }
 };
@@ -234,14 +238,18 @@ export const deleteTemplate = async (id: string) => {
  */
 export const deleteProject = async (id: string) => {
     try {
-        const { error } = await supabase
-            .from('projects')
-            .delete()
-            .eq('id', id);
+        const response = await fetch('/api/projects/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete project');
+        }
     } catch (error) {
-        console.error("Error deleting project from Supabase:", error);
+        console.error("Error deleting project via API:", error);
         throw error;
     }
 };
