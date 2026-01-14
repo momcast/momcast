@@ -584,34 +584,28 @@ const SceneEditor: React.FC<{
             >
               사진 편집
             </button>
-            <button
-              onClick={() => {
-                if (canDecorate) {
+            {(isAdminMode || canDecorate) && (
+              <button
+                onClick={() => {
                   setMode('decorate');
                   setIsCropMode(false);
-                } else {
-                  alert("이 장면은 유저 꾸미기가 제한되어 있습니다.");
-                }
-              }}
-              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'decorate' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'} ${!canDecorate ? 'opacity-30 cursor-not-allowed' : ''}`}
-            >
-              꾸미기 {!canDecorate && '🔒'}
-            </button>
+                }}
+                className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'decorate' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}
+              >
+                꾸미기
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-32">
             {mode === 'edit' && (
               <div className="space-y-8">
-                {canUpload ? (
+                {canUpload && (
                   <div className="grid grid-cols-2 gap-4">
                     <button onClick={() => fileInputRef.current?.click()} className="py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
                       <Icons.Change /> {isAdminMode ? '오버레이 교체' : '사진 교체'}
                     </button>
                     <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
-                  </div>
-                ) : (
-                  <div className="p-6 bg-red-50 border border-red-100 rounded-2xl text-center">
-                    <p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-relaxed">이 장면은 관리자 설정에 의해<br />이미지 업로드가 제한되었습니다 🔒</p>
                   </div>
                 )}
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
@@ -625,17 +619,19 @@ const SceneEditor: React.FC<{
                     </div>
                     {currentScene.backgroundMode === 'solid' && <ColorPickerRainbow currentColor={currentScene.backgroundColor} onColorChange={c => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, backgroundColor: c }))} />}
                   </div>
-                  <div className="space-y-6 border-t pt-8 border-gray-100">
-                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">이미지 변형</span>
-                    <div className="flex gap-4">
-                      <button onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))} className="flex-1 py-4 bg-white border border-gray-100 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 active:bg-gray-100 transition-colors shadow-sm"><Icons.Rotate /> 회전</button>
-                      <button onClick={() => setIsCropMode(!isCropMode)} className={`flex-1 py-4 border rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isCropMode ? 'bg-[#ffb3a3] text-white border-[#ffb3a3] shadow-lg' : 'bg-white border-gray-100 hover:bg-gray-50'}`}><Icons.Crop /> {isCropMode ? '완료' : '자르기'}</button>
+                  {canUpload && (
+                    <div className="space-y-6 border-t pt-8 border-gray-100">
+                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">이미지 변형</span>
+                      <div className="flex gap-4">
+                        <button onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))} className="flex-1 py-4 bg-white border border-gray-100 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 active:bg-gray-100 transition-colors shadow-sm"><Icons.Rotate /> 회전</button>
+                        <button onClick={() => setIsCropMode(!isCropMode)} className={`flex-1 py-4 border rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isCropMode ? 'bg-[#ffb3a3] text-white border-[#ffb3a3] shadow-lg' : 'bg-white border-gray-100 hover:bg-gray-50'}`}><Icons.Crop /> {isCropMode ? '완료' : '자르기'}</button>
+                      </div>
+                      <div className={`space-y-4 bg-gray-50 p-6 rounded-3xl border border-gray-100 transition-opacity ${isCropMode ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                        <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>확대 / 축소</span><span>{Math.round(currentScene.zoom * 100)}%</span></div>
+                        <input type="range" min="0.5" max="4" step="0.1" value={currentScene.zoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, zoom: parseFloat(e.target.value) }))} className="w-full accent-[#ffb3a3] h-2 rounded-full cursor-pointer appearance-none bg-gray-200" />
+                      </div>
                     </div>
-                    <div className={`space-y-4 bg-gray-50 p-6 rounded-3xl border border-gray-100 transition-opacity ${isCropMode ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-                      <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>확대 / 축소</span><span>{Math.round(currentScene.zoom * 100)}%</span></div>
-                      <input type="range" min="0.5" max="4" step="0.1" value={currentScene.zoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, zoom: parseFloat(e.target.value) }))} className="w-full accent-[#ffb3a3] h-2 rounded-full cursor-pointer appearance-none bg-gray-200" />
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -709,24 +705,21 @@ const SceneEditor: React.FC<{
               </div>
             )}
 
-            <div className="space-y-4 border-t pt-8 border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
-                  문구작성 {!canEditText && '🔒'}
-                </span>
-              </div>
-              <textarea
-                className={`w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner ${!canEditText ? 'opacity-50 cursor-not-allowed' : ''}`}
-                value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                  if (canEditText) {
+            {(isAdminMode || canEditText) && (
+              <div className="space-y-4 border-t pt-8 border-gray-100">
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">문구작성</span>
+                </div>
+                <textarea
+                  className="w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner"
+                  value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                     setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }));
-                  }
-                }}
-                disabled={!canEditText}
-                placeholder={canEditText ? "오늘의 소중한 순간을 기록해보세요..." : "이 장면은 문구 수정이 제한되어 있습니다."}
-              />
-            </div>
+                  }}
+                  placeholder="오늘의 소중한 순간을 기록해보세요..."
+                />
+              </div>
+            )}
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-50 z-20">
             <button onClick={() => onSave(currentScene)} className="w-full py-5 bg-[#03C75A] text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.3em]">장면 저장하기</button>
