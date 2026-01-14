@@ -609,7 +609,7 @@ const SceneEditor: React.FC<{
                   </div>
                 )}
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
-                <div className="space-y-6">
+                {canUpload && (
                   <div className="space-y-4">
                     <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">배경 모드</span>
                     <div className="flex gap-2">
@@ -619,20 +619,20 @@ const SceneEditor: React.FC<{
                     </div>
                     {currentScene.backgroundMode === 'solid' && <ColorPickerRainbow currentColor={currentScene.backgroundColor} onColorChange={c => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, backgroundColor: c }))} />}
                   </div>
-                  {canUpload && (
-                    <div className="space-y-6 border-t pt-8 border-gray-100">
-                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">이미지 변형</span>
-                      <div className="flex gap-4">
-                        <button onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))} className="flex-1 py-4 bg-white border border-gray-100 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 active:bg-gray-100 transition-colors shadow-sm"><Icons.Rotate /> 회전</button>
-                        <button onClick={() => setIsCropMode(!isCropMode)} className={`flex-1 py-4 border rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isCropMode ? 'bg-[#ffb3a3] text-white border-[#ffb3a3] shadow-lg' : 'bg-white border-gray-100 hover:bg-gray-50'}`}><Icons.Crop /> {isCropMode ? '완료' : '자르기'}</button>
-                      </div>
-                      <div className={`space-y-4 bg-gray-50 p-6 rounded-3xl border border-gray-100 transition-opacity ${isCropMode ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-                        <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>확대 / 축소</span><span>{Math.round(currentScene.zoom * 100)}%</span></div>
-                        <input type="range" min="0.5" max="4" step="0.1" value={currentScene.zoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, zoom: parseFloat(e.target.value) }))} className="w-full accent-[#ffb3a3] h-2 rounded-full cursor-pointer appearance-none bg-gray-200" />
-                      </div>
+                )}
+                {canUpload && (
+                  <div className="space-y-6 border-t pt-8 border-gray-100">
+                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">이미지 변형</span>
+                    <div className="flex gap-4">
+                      <button onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))} className="flex-1 py-4 bg-white border border-gray-100 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 active:bg-gray-100 transition-colors shadow-sm"><Icons.Rotate /> 회전</button>
+                      <button onClick={() => setIsCropMode(!isCropMode)} className={`flex-1 py-4 border rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isCropMode ? 'bg-[#ffb3a3] text-white border-[#ffb3a3] shadow-lg' : 'bg-white border-gray-100 hover:bg-gray-50'}`}><Icons.Crop /> {isCropMode ? '완료' : '자르기'}</button>
                     </div>
-                  )}
-                </div>
+                    <div className={`space-y-4 bg-gray-50 p-6 rounded-3xl border border-gray-100 transition-opacity ${isCropMode ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+                      <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>확대 / 축소</span><span>{Math.round(currentScene.zoom * 100)}%</span></div>
+                      <input type="range" min="0.5" max="4" step="0.1" value={currentScene.zoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, zoom: parseFloat(e.target.value) }))} className="w-full accent-[#ffb3a3] h-2 rounded-full cursor-pointer appearance-none bg-gray-200" />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
