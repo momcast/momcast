@@ -40,6 +40,7 @@ export const uploadImage = async (file: File): Promise<string> => {
     return url;
   } catch (error) {
     console.error("❌ R2 업로드 중 오류:", error);
+    alert("이미지 서버(R2) 업로드에 실패했습니다. 환경 변수 설정을 확인해 주세요. (임시로 기본 스토리지에 저장됩니다)");
     // 폴백: base64 (임시)
     return new Promise((resolve) => {
       const reader = new FileReader();

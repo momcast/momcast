@@ -886,8 +886,8 @@ export default function App() {
       if (activeTemplate?.id === id) setActiveTemplate(null);
       console.log(`[Admin] Template ${id} permanently deleted.`);
     } catch (error) {
-      alert('템플릿 삭제 중 오류가 발생했습니다.');
-      console.error(error);
+      console.error("❌ 템플릿 삭제 중 오류:", error);
+      alert("템플릿 삭제 중 오류가 발생했습니다.");
     }
   };
 
@@ -973,7 +973,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => {
-                    setActiveTemplate({ id: `t_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, name: "새 템플릿", sceneCount: 0, scenes: [], created_at: new Date().toISOString() });
+                    setActiveTemplate({ id: crypto.randomUUID(), name: "새 템플릿", sceneCount: 0, scenes: [], created_at: new Date().toISOString() });
                     setActiveProject(null);
                     setPrevView(view);
                     setView('editor');
@@ -999,7 +999,7 @@ export default function App() {
                         const expiry = new Date(); expiry.setDate(expiry.getDate() + 14);
                         setPrevView(view);
                         setActiveProject({
-                          id: `p_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                          id: crypto.randomUUID(),
                           templateId: tmpl.id,
                           userId: user.id,
                           projectName: tmpl.name,
