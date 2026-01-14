@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, onAuthStateChange, signInWithNaver } from './authService'
 import { useSession } from "next-auth/react";
-import { getTemplates, saveTemplate, deleteTemplate, saveUserRequest } from './dbService'
+import { getTemplates, saveTemplate, deleteTemplate, saveProject, getUserProjects, saveUserRequest, getAdminRequests, updateRequestStatus, getUserRequests } from './dbService';
+import { sendDraftCompletionNotification } from './notificationService';
 import { uploadImage } from './firebase'
 import {
   type UserProfile,
@@ -30,6 +31,8 @@ const Icons = {
   Undo: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
   Trash: () => <svg className="w-4 h-4" pointerEvents="none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
   Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+  Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
+  ExternalLink: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
 };
 
 const STICKER_COUNT = 20;
@@ -738,6 +741,7 @@ export default function App() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [userProjects, setUserProjects] = useState<UserProject[]>([]);
   const [adminRequests, setAdminRequests] = useState<UserRequest[]>([]);
+  const [userRequests, setUserRequests] = useState<UserRequest[]>([]);
 
   // Request Modals State
   const [requestModal, setRequestModal] = useState<{ type: 'draft' | 'final' | null, projectId: string | null }>({ type: null, projectId: null });
@@ -748,7 +752,7 @@ export default function App() {
 
   // 인증 상태 리스너 (Supabase)
   useEffect(() => {
-    const { data: { subscription } } = onAuthStateChange((profile) => {
+    const { data: { subscription } } = onAuthStateChange((profile: UserProfile | null) => {
       // NextAuth 세션이 없을 때만 Supabase 프로필 반영
       if (profile && status !== "authenticated") {
         setUser(profile);
@@ -793,24 +797,11 @@ export default function App() {
   // 사용자 프로젝트 로드 (만료 시간 체크 및 유효성 검사)
   useEffect(() => {
     if (user) {
-      const saved = localStorage.getItem(`momcast_projects_${user.id}`);
-      if (saved) {
-        try {
-          const loaded: UserProject[] = JSON.parse(saved);
-          const now = new Date();
-          const validProjects = loaded.filter(p => p && p.id && new Date(p.expires_at) > now);
-          if (loaded.length !== validProjects.length) {
-            localStorage.setItem(`momcast_projects_${user.id}`, JSON.stringify(validProjects));
-          }
-          setUserProjects(validProjects);
-        } catch {
-          setUserProjects([]);
-        }
-      } else {
-        setUserProjects([]);
-      }
+      getUserProjects(user.id).then(setUserProjects);
+      getUserRequests(user.id).then(setUserRequests);
     } else {
       setUserProjects([]);
+      setUserRequests([]);
     }
   }, [user]);
 
@@ -829,19 +820,25 @@ export default function App() {
 
   const handleFinalSave = () => {
     if (activeProject) {
-      setUserProjects((prev: UserProject[]) => {
-        const filtered = prev.filter((p: UserProject) => p.id !== activeProject.id);
-        const next = [activeProject, ...filtered];
-        if (user) localStorage.setItem(`momcast_projects_${user.id}`, JSON.stringify(next));
-        return next;
+      saveProject({
+        id: activeProject.id,
+        user_id: activeProject.userId,
+        template_id: activeProject.templateId,
+        name: activeProject.projectName,
+        scenes: activeProject.userScenes,
+        expires_at: activeProject.expires_at
+      }).then(() => {
+        setUserProjects((prev: UserProject[]) => {
+          const filtered = prev.filter((p: UserProject) => p.id !== activeProject.id);
+          return [activeProject, ...filtered];
+        });
       });
       setActiveProject(null);
     } else if (activeTemplate) {
       saveTemplate(activeTemplate).then(() => {
         setTemplates((prev: Template[]) => {
           const filtered = prev.filter(t => t.id !== activeTemplate.id);
-          const next = [activeTemplate, ...filtered];
-          return next;
+          return [activeTemplate, ...filtered];
         });
       });
       setActiveTemplate(null);
@@ -1104,29 +1101,51 @@ export default function App() {
                         </div>
 
                         {/* Row 2: Draft and Final Requests */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => setRequestModal({ type: 'draft', projectId: item.id })}
-                            className="py-3.5 bg-white border-2 border-[#ffb3a3] text-[#ffb3a3] rounded-xl font-black text-[10px] uppercase tracking-wider text-center hover:bg-[#ffb3a3] hover:text-white transition-all shadow-sm active:scale-95"
-                            type="button"
-                          >
-                            시안요청
-                          </button>
-                          <button
-                            onClick={() => {
-                              // Mock payment check
-                              const hasPaid = true; // For now simulation
-                              if (hasPaid) {
-                                setRequestModal({ type: 'final', projectId: item.id });
-                              } else {
-                                alert('결제 확인 부탁드립니다');
-                              }
-                            }}
-                            className="py-3.5 bg-[#ffb3a3] text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 hover:brightness-105 transition-all"
-                            type="button"
-                          >
-                            최종요청
-                          </button>
+                        <div className="flex flex-col gap-2">
+                          {userRequests.find(r => r.projectId === item.id) ? (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">요청 상태</span>
+                                <span className={`text-[10px] font-black uppercase ${userRequests.find(r => r.projectId === item.id)?.status === 'completed' ? 'text-green-500' : 'text-[#ffb3a3]'}`}>
+                                  {userRequests.find(r => r.projectId === item.id)?.status === 'completed' ? '완료' : '처리 중'}
+                                </span>
+                              </div>
+                              {userRequests.find(r => r.projectId === item.id)?.status === 'completed' && userRequests.find(r => r.projectId === item.id)?.resultUrl && (
+                                <a
+                                  href={userRequests.find(r => r.projectId === item.id)?.resultUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="py-3.5 bg-[#03C75A] text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                  <Icons.ExternalLink /> 시안 확인하기
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => setRequestModal({ type: 'draft', projectId: item.id })}
+                                className="py-3.5 bg-white border-2 border-[#ffb3a3] text-[#ffb3a3] rounded-xl font-black text-[10px] uppercase tracking-wider text-center hover:bg-[#ffb3a3] hover:text-white transition-all shadow-sm active:scale-95"
+                                type="button"
+                              >
+                                시안요청
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const hasPaid = true;
+                                  if (hasPaid) {
+                                    setRequestModal({ type: 'final', projectId: item.id });
+                                  } else {
+                                    alert('결제 확인 부탁드립니다');
+                                  }
+                                }}
+                                className="py-3.5 bg-[#ffb3a3] text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 hover:brightness-105 transition-all"
+                                type="button"
+                              >
+                                최종요청
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1189,7 +1208,42 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="p-4 bg-gray-50 text-gray-400 rounded-full hover:bg-[#ffb3a3] hover:text-white transition-all"><Icons.Edit /></button>
+                    {req.status !== 'completed' ? (
+                      <div className="flex items-center gap-2">
+                        <label className="cursor-pointer px-6 py-3 bg-[#ffb3a3] text-white rounded-full font-black text-[10px] uppercase shadow-md hover:scale-105 transition-all flex items-center gap-2">
+                          <Icons.Upload /> 결과 업로드
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (!confirm('가공된 시안을 업로드하고 사용자에게 알림을 보낼까요?')) return;
+
+                              try {
+                                const url = await uploadImage(file);
+                                await updateRequestStatus(req.id, 'completed', url);
+                                await sendDraftCompletionNotification(req.contactInfo, req.projectName);
+                                alert('시안 업로드 및 알림 전송이 완료되었습니다!');
+                                // 리스트 갱신
+                                getAdminRequests().then(setAdminRequests);
+                              } catch (err) {
+                                console.error(err);
+                                alert('처리 중 오류가 발생했습니다.');
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="px-6 py-3 bg-gray-100 text-gray-400 rounded-full font-black text-[10px] uppercase">처리 완료</span>
+                        {req.resultUrl && (
+                          <a href={req.resultUrl} target="_blank" rel="noreferrer" className="p-3 bg-white border border-gray-100 rounded-full text-gray-400 hover:text-gray-900 shadow-sm"><Icons.ExternalLink /></a>
+                        )}
+                      </div>
+                    )}
+                    <button className="p-4 bg-gray-50 text-gray-400 rounded-full hover:bg-gray-100 transition-all"><Icons.Edit /></button>
                   </div>
                 </div>
               ))}
@@ -1357,6 +1411,8 @@ export default function App() {
                     setRequestModal({ type: null, projectId: null });
                     setPhoneNumber('');
                     setEmailAddress('');
+                    // 새로고침
+                    getUserRequests(user.id).then(setUserRequests);
                   } catch {
                     alert('요청 중 오류가 발생했습니다.');
                   }

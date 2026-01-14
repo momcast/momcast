@@ -1,5 +1,5 @@
 import { supabase, type Project } from './supabaseClient'
-import type { UserRequest, AdminScene, UserScene, Template } from './types'
+import type { UserRequest, AdminScene, UserScene, Template, UserProject } from './types'
 
 export const saveUserRequest = async (request: {
     project_id: string,
@@ -53,6 +53,7 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
             type: 'draft' | 'final',
             status: 'pending' | 'processing' | 'completed',
             contact_info: string,
+            result_url?: string,
             created_at: string
         }) => ({
             id: req.id,
@@ -63,11 +64,49 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
             type: req.type,
             status: req.status,
             contactInfo: req.contact_info,
+            resultUrl: req.result_url,
             createdAt: req.created_at,
             userScenes: req.projects?.scenes || []
         }));
     } catch (error) {
         console.error("Error fetching requests from Supabase:", error);
+        return [];
+    }
+};
+
+export const getUserRequests = async (userId: string): Promise<UserRequest[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('requests')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map((req: {
+            id: string,
+            project_id: string,
+            user_id: string,
+            type: 'draft' | 'final',
+            status: 'pending' | 'processing' | 'completed',
+            contact_info: string,
+            result_url?: string,
+            created_at: string
+        }) => ({
+            id: req.id,
+            projectId: req.project_id,
+            projectName: '', // Will be filled if needed or use item link
+            userId: req.user_id,
+            userName: '',
+            type: req.type,
+            status: req.status,
+            contactInfo: req.contact_info,
+            resultUrl: req.result_url,
+            createdAt: req.created_at,
+            userScenes: []
+        }));
+    } catch (error) {
+        console.error("Error fetching user requests:", error);
         return [];
     }
 };
@@ -83,6 +122,47 @@ export const saveProject = async (project: Project) => {
         if (error) throw error;
     } catch (error) {
         console.error("Error saving project:", error);
+        throw error;
+    }
+};
+
+// 사용자 프로젝트 목록 가져오기
+export const getUserProjects = async (userId: string): Promise<UserProject[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map(p => ({
+            id: p.id,
+            templateId: p.template_id,
+            userId: p.user_id,
+            projectName: p.name,
+            userScenes: p.scenes,
+            status: p.status || 'draft',
+            created_at: p.created_at,
+            expires_at: p.expires_at
+        }));
+    } catch (error) {
+        console.error("Error fetching user projects:", error);
+        return [];
+    }
+};
+
+// 요청 상태 업데이트 및 결과물 등록 (어드민용)
+export const updateRequestStatus = async (requestId: string, status: 'pending' | 'processing' | 'completed', resultUrl?: string) => {
+    try {
+        const { error } = await supabase
+            .from('requests')
+            .update({ status, result_url: resultUrl })
+            .eq('id', requestId);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error updating request status:", error);
         throw error;
     }
 };

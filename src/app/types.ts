@@ -86,6 +86,7 @@ export interface UserRequest {
   type: 'draft' | 'final';
   status: 'pending' | 'processing' | 'completed';
   contactInfo: string;
+  resultUrl?: string;
   createdAt: string;
   userScenes: (AdminScene | UserScene)[]; // Using specific union type instead of any[]
 }

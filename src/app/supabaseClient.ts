@@ -33,5 +33,6 @@ export interface UserRequest {
     type: 'draft' | 'final'
     contact_info: string
     status: 'pending' | 'processing' | 'completed'
+    result_url?: string
     created_at?: string
 }
