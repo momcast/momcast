@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MOMCAST - 엄마를 위한 영상 제작 플랫폼",
-  description: "소중한 순간을 특별한 영상으로, MOMCAST에서 누구나 쉽게 영상을 제작해 보세요.",
+  title: "MOMCAST STUDIO",
+  description: "Create your precious moments into professional videos with MOMCAST STUDIO.",
   icons: {
     icon: [
       { url: "/momcast-logo.png?v=2" },
