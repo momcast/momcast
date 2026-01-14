@@ -78,7 +78,7 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
 /**
  * 사용자 본인의 요청 목록 가져오기
  */
-export const getUserRequests = async (_userId: string): Promise<UserRequest[]> => {
+export const getUserRequests = async (): Promise<UserRequest[]> => {
     try {
         const response = await fetch('/api/requests/user');
         if (!response.ok) {
@@ -141,7 +141,7 @@ export const saveProject = async (project: Project) => {
 /**
  * 사용자 본인의 프로젝트 목록 가져오기
  */
-export const getUserProjects = async (_userId: string): Promise<UserProject[]> => {
+export const getUserProjects = async (): Promise<UserProject[]> => {
     try {
         const response = await fetch('/api/projects/user');
         if (!response.ok) {

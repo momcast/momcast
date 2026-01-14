@@ -63,11 +63,12 @@ export async function appendToSheet(data: {
             }
         });
         console.log('✅ Appended row to Sheet success');
-    } catch (error: any) {
+    } catch (error: unknown) {
+        const err = error as { message?: string; status?: number; response?: { data?: { error?: string } } };
         console.error('❌ Google Sheets Append Error:', {
-            message: error.message,
-            status: error.status,
-            details: error.response?.data?.error
+            message: err.message,
+            status: err.status,
+            details: err.response?.data?.error
         });
     }
 }
