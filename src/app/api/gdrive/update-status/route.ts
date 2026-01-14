@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
-import { syncToGoogleDrive } from '../../../gdrive';
+import { updateSheetStatus } from '../../../gdrive';
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { projectName, requestId, scenes, userInfo } = body;
+        const { requestId, status, resultUrl } = body;
 
-        if (!projectName || !requestId || !scenes || !userInfo) {
+        if (!requestId || !status) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const folderId = await syncToGoogleDrive(projectName, requestId, scenes, userInfo);
+        await updateSheetStatus(requestId, status, resultUrl || '-');
 
-        return NextResponse.json({ success: true, folderId });
+        return NextResponse.json({ success: true });
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Internal Server Error';
         console.error('API Error:', error);

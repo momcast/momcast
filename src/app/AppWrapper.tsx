@@ -1224,6 +1224,14 @@ export default function App() {
                                 const url = await uploadImage(file);
                                 await updateRequestStatus(req.id, 'completed', url);
                                 await sendDraftCompletionNotification(req.contactInfo, req.projectName);
+
+                                // 구글 시트 상태 업데이트 (백그라운드)
+                                fetch('/api/gdrive/update-status', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ requestId: req.id, status: '완료', resultUrl: url })
+                                }).catch(err => console.error('Sheet update failed:', err));
+
                                 alert('시안 업로드 및 알림 전송이 완료되었습니다!');
                                 // 리스트 갱신
                                 getAdminRequests().then(setAdminRequests);
@@ -1242,6 +1250,14 @@ export default function App() {
                               try {
                                 await updateRequestStatus(req.id, 'completed', url);
                                 await sendDraftCompletionNotification(req.contactInfo, req.projectName);
+
+                                // 구글 시트 상태 업데이트 (백그라운드)
+                                fetch('/api/gdrive/update-status', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ requestId: req.id, status: '완료', resultUrl: url })
+                                }).catch(err => console.error('Sheet update failed:', err));
+
                                 alert('링크 등록 및 알림 전송이 완료되었습니다!');
                                 getAdminRequests().then(setAdminRequests);
                               } catch (err) {
@@ -1435,7 +1451,12 @@ export default function App() {
                         body: JSON.stringify({
                           projectName: project.projectName,
                           requestId: requestId,
-                          scenes: project.userScenes
+                          scenes: project.userScenes,
+                          userInfo: {
+                            name: user.name || user.email?.split('@')[0] || 'Unknown',
+                            phone: phoneNumber,
+                            email: user.email || ''
+                          }
                         })
                       }).then(res => res.json())
                         .then(data => console.log('G-Drive Sync:', data))
