@@ -1,5 +1,5 @@
 import { supabase, type Project } from './supabaseClient'
-import type { UserRequest, AdminScene, UserScene, Template, UserProject } from './types'
+import type { UserRequest, Template, UserProject } from './types'
 
 export const saveUserRequest = async (request: {
     project_id: string,
@@ -39,7 +39,18 @@ export const getAdminRequests = async (): Promise<UserRequest[]> => {
 
         const data = await response.json();
 
-        return (data || []).map((req: any) => ({
+        return (data || []).map((req: {
+            id: string,
+            project_id: string,
+            user_id: string,
+            type: 'draft' | 'final',
+            status: 'pending' | 'processing' | 'completed',
+            contact_info: string,
+            result_url?: string,
+            created_at: string,
+            projects?: { name: string, scenes: unknown[] } | null,
+            profiles?: { name: string | null, email: string | null } | null
+        }) => ({
             id: req.id,
             projectId: req.project_id,
             projectName: req.projects?.name || 'Unknown Project',
