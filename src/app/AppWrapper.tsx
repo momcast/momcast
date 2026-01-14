@@ -3,7 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { signOut, onAuthStateChange, signInWithNaver } from './authService'
 import { useSession } from "next-auth/react";
-import { getTemplates, saveTemplate, deleteTemplate, saveProject, getUserProjects, saveUserRequest, getAdminRequests, updateRequestStatus, getUserRequests } from './dbService';
+import {
+  getTemplates, saveTemplate, deleteTemplate,
+  saveProject, getUserProjects, updateRequestStatus, getUserRequests, deleteProject,
+  getAdminRequests, saveUserRequest
+} from './dbService';
 import { sendDraftCompletionNotification } from './notificationService';
 import { uploadImage } from './firebase'
 import {
@@ -818,32 +822,46 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<UserProject | null>(null);
   const [editingSceneIdx, setEditingSceneIdx] = useState<number | null>(null);
 
-  const handleFinalSave = () => {
+  const handleFinalSave = async () => {
     if (activeProject) {
-      saveProject({
-        id: activeProject.id,
-        user_id: activeProject.userId,
-        template_id: activeProject.templateId,
-        name: activeProject.projectName,
-        scenes: activeProject.userScenes,
-        expires_at: activeProject.expires_at
-      }).then(() => {
+      try {
+        await saveProject({
+          id: activeProject.id,
+          user_id: activeProject.userId,
+          template_id: activeProject.templateId,
+          name: activeProject.projectName,
+          scenes: activeProject.userScenes,
+          expires_at: activeProject.expires_at
+        });
+
         setUserProjects((prev: UserProject[]) => {
           const filtered = prev.filter((p: UserProject) => p.id !== activeProject.id);
           return [activeProject, ...filtered];
         });
-      });
-      setActiveProject(null);
+
+        alert('성공적으로 저장되었습니다!');
+        setActiveProject(null);
+        setView('history');
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류';
+        alert('저장 중 오류가 발생했습니다: ' + errorMessage);
+        console.error('Save failed:', err);
+      }
     } else if (activeTemplate) {
-      saveTemplate(activeTemplate).then(() => {
+      try {
+        await saveTemplate(activeTemplate);
         setTemplates((prev: Template[]) => {
           const filtered = prev.filter(t => t.id !== activeTemplate.id);
           return [activeTemplate, ...filtered];
         });
-      });
-      setActiveTemplate(null);
+        alert('템플릿이 저장되었습니다!');
+        setActiveTemplate(null);
+        setView('history');
+      } catch (err: unknown) {
+        alert('템플릿 저장 중 오류가 발생했습니다.');
+        console.error(err);
+      }
     }
-    setView('history');
   };
 
   // [명예 회복] 템플릿 삭제 및 연쇄 삭제 로직
@@ -873,15 +891,21 @@ export default function App() {
     }
   };
 
-  const handleDeleteProject = (id: string) => {
+  const handleDeleteProject = async (id: string) => {
     if (!user) return;
     if (!window.confirm('이 기록을 영구적으로 삭제하시겠습니까?')) return;
 
-    const nextProjects = userProjects.filter(p => p.id !== id);
-    setUserProjects(nextProjects);
-    localStorage.setItem(`momcast_projects_${user.id}`, JSON.stringify(nextProjects));
+    try {
+      await deleteProject(id);
+      const nextProjects = userProjects.filter(p => p.id !== id);
+      setUserProjects(nextProjects);
 
-    if (activeProject?.id === id) setActiveProject(null);
+      if (activeProject?.id === id) setActiveProject(null);
+      console.log(`[User] Project ${id} deleted from Supabase.`);
+    } catch (err: unknown) {
+      alert('삭제 중 오류가 발생했습니다.');
+      console.error(err);
+    }
   };
 
   const handleLogout = async () => {

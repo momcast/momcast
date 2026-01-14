@@ -229,3 +229,19 @@ export const deleteTemplate = async (id: string) => {
         throw error;
     }
 };
+/**
+ * 프로젝트 삭제
+ */
+export const deleteProject = async (id: string) => {
+    try {
+        const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error deleting project from Supabase:", error);
+        throw error;
+    }
+};
