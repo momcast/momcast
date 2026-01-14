@@ -37,11 +37,17 @@ export async function appendToSheet(data: {
             return;
         }
 
+        // [개선] 시트명 자동 감지 (첫 번째 시트를 타겟으로 함)
+        const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+        const firstSheetTitle = spreadsheet.data.sheets?.[0]?.properties?.title || 'Sheet1';
+
+        console.log(`📊 Target Sheet: "${firstSheetTitle}"`);
+
         const date = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 
         await sheets.spreadsheets.values.append({
             spreadsheetId,
-            range: 'Sheet1!A2', // 첫 번째 시트에 추가 (헤더 제외)
+            range: `${firstSheetTitle}!A2`,
             valueInputOption: 'RAW',
             requestBody: {
                 values: [[
@@ -56,9 +62,13 @@ export async function appendToSheet(data: {
                 ]]
             }
         });
-        console.log('✅ Appended row to Sheet');
-    } catch (error) {
-        console.error('❌ Google Sheets Append Error:', error);
+        console.log('✅ Appended row to Sheet success');
+    } catch (error: any) {
+        console.error('❌ Google Sheets Append Error:', {
+            message: error.message,
+            status: error.status,
+            details: error.response?.data?.error
+        });
     }
 }
 
