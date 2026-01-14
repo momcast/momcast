@@ -801,8 +801,8 @@ export default function App() {
   // 사용자 프로젝트 로드 (만료 시간 체크 및 유효성 검사)
   useEffect(() => {
     if (user) {
-      getUserProjects(user.id).then(setUserProjects);
-      getUserRequests(user.id).then(setUserRequests);
+      getUserProjects().then(setUserProjects);
+      getUserRequests().then(setUserRequests);
     } else {
       setUserProjects([]);
       setUserRequests([]);
@@ -1497,7 +1497,7 @@ export default function App() {
                     setPhoneNumber('');
                     setEmailAddress('');
                     // 새로고침
-                    getUserRequests(user.id).then(setUserRequests);
+                    getUserRequests().then(setUserRequests);
                   } catch {
                     alert('요청 중 오류가 발생했습니다.');
                   }
