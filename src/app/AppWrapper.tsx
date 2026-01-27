@@ -9,6 +9,7 @@ import {
   getAdminRequests, saveUserRequest
 } from './dbService';
 import { sendDraftCompletionNotification } from './notificationService';
+import { VideoEngine } from '../components/VideoEngine';
 import { uploadImage } from './firebase'
 import {
   type UserProfile,
@@ -826,6 +827,66 @@ export default function App() {
   const [activeProject, setActiveProject] = useState<UserProject | null>(null);
   const [editingSceneIdx, setEditingSceneIdx] = useState<number | null>(null);
 
+  // Video Rendering State
+  const [isRendering, setIsRendering] = useState(false);
+  const [isCloudRendering, setIsCloudRendering] = useState(false);
+  const [renderingProgress, setRenderingProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [lottieTemplate, setLottieTemplate] = useState<any>(null);
+
+  const handleOpenRendering = async () => {
+    setIsRendering(true);
+    // Load default Lottie template (could be dynamic later)
+    try {
+      const res = await fetch('/templates/template_v1.json');
+      const data = await res.json();
+      setLottieTemplate(data);
+    } catch (e) {
+      console.error("Failed to load Lottie template", e);
+      alert("비디오 템플릿을 불러오지 못했습니다.");
+    }
+  };
+
+  const handleCloudRender = async () => {
+    if (!lottieTemplate || !activeProject) return;
+    setIsCloudRendering(true);
+    try {
+      // Map project data to VideoEngine format
+      const userImages: Record<string, string> = {};
+      const userTexts: Record<string, string> = {};
+
+      activeProject.userScenes.forEach((scene, idx) => {
+        // Assume scene.id or index maps to asset/layer name
+        if (scene.userImageUrl) {
+          // This mapping logic needs to match the Lottie template structure
+          // For template_v1.json, assets are named image_0, image_1...
+          userImages[`image_${idx}`] = scene.userImageUrl;
+        }
+        userTexts[`text_${idx}`] = scene.content || "";
+      });
+
+      const response = await fetch('/api/render/cloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template: lottieTemplate,
+          userImages,
+          userTexts
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert("✅ 클라우드 제작 요청 성공! 몇 분 후 보관함에서 확인해 주세요.");
+      } else {
+        alert("❌ 클라우드 요청 실패: " + data.error);
+      }
+    } catch (e: any) {
+      alert("⚠️ 오류 발생: " + e.message);
+    } finally {
+      setIsCloudRendering(false);
+    }
+  };
+
   const handleFinalSave = async () => {
     if (activeProject) {
       try {
@@ -1337,6 +1398,7 @@ export default function App() {
               </div>
               <div className="flex gap-4">
                 <button onClick={() => setView('history')} className="px-8 py-5 bg-white border border-gray-200 text-gray-900 font-black rounded-[2rem] text-[11px] uppercase tracking-[0.1em] transition-all">보관함 이동</button>
+                <button onClick={handleOpenRendering} className="px-8 py-5 bg-blue-600 text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.1em] hover:bg-blue-500 transition-all">비디오 미리보기</button>
                 <button onClick={handleFinalSave} className="px-12 py-5 bg-[#03C75A] text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.3em] hover:brightness-105 transition-all">전체 저장</button>
               </div>
             </div>
@@ -1506,6 +1568,84 @@ export default function App() {
               >
                 완료
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Video Rendering Modal */}
+      {isRendering && lottieTemplate && (
+        <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-2xl flex items-center justify-center p-6 md:p-12">
+          <div className="w-full h-full max-w-6xl flex flex-col gap-8">
+            <header className="flex justify-between items-center text-white shrink-0">
+              <div>
+                <h2 className="text-3xl font-black tracking-tighter italic uppercase">VIDEO ENGINE PREVIEW</h2>
+                <p className="text-xs font-bold text-gray-500 tracking-widest mt-1">LOTTIE X FFMPEG DRAFT SYSTEM</p>
+              </div>
+              <button
+                onClick={() => setIsRendering(false)}
+                className="p-4 bg-white/5 hover:bg-white/10 rounded-full transition-all border border-white/5"
+              >
+                <Icons.Close />
+              </button>
+            </header>
+
+            <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-8">
+              <div className="flex-1 bg-black rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/5 relative">
+                <VideoEngine
+                  templateData={lottieTemplate}
+                  userImages={(() => {
+                    const imgs: Record<string, string> = {};
+                    activeProject?.userScenes.forEach((s, i) => {
+                      if (s.userImageUrl) imgs[`image_${i}`] = s.userImageUrl;
+                    });
+                    return imgs;
+                  })()}
+                  userTexts={(() => {
+                    const txts: Record<string, string> = {};
+                    activeProject?.userScenes.forEach((s, i) => {
+                      txts[`text_${i}`] = s.content || "";
+                    });
+                    return txts;
+                  })()}
+                  onProgress={setRenderingProgress}
+                  onComplete={(blob) => {
+                    const url = URL.createObjectURL(blob);
+                    setVideoUrl(url);
+                  }}
+                />
+              </div>
+
+              <div className="w-full md:w-[360px] flex flex-col gap-6">
+                <div className="bg-white/5 p-8 rounded-[2rem] border border-white/5 space-y-4">
+                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">배포 옵션</h4>
+                  <p className="text-[10px] text-gray-500 leading-relaxed font-medium capitalize">
+                    로컬 렌더링은 브라우저 성능을 사용하며, 클라우드 렌더링은 고품질의 최종 결과물을 서버에서 생성합니다.
+                  </p>
+                </div>
+
+                <div className="flex-1" />
+
+                <button
+                  onClick={handleCloudRender}
+                  disabled={isCloudRendering}
+                  className={`w-full py-6 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all border shrink-0 ${isCloudRendering
+                      ? 'bg-gray-800 text-gray-500 border-transparent animate-pulse cursor-not-allowed'
+                      : 'bg-white text-black border-white hover:bg-gray-100 active:scale-95'
+                    }`}
+                >
+                  {isCloudRendering ? '전송 중...' : '클라우드 제작 (초고화질)'}
+                </button>
+
+                {videoUrl && (
+                  <a
+                    href={videoUrl}
+                    download="momcast_v1_draft.mp4"
+                    className="w-full py-6 bg-[#03C75A] text-white text-center rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-[#03C75A]/20 hover:brightness-110 active:scale-95 transition-all"
+                  >
+                    드래프트 영상 다운로드
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>

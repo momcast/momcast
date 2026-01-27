@@ -1,0 +1,35 @@
+name: Render Video
+
+on:
+  repository_dispatch:
+    types: [render_video]
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm install
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libgbm-dev libasound2 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxrandr2 libpango-1.0-0 libcairo2 libasound2
+
+      - name: Run Render Script
+        env:
+          PROJECT_DATA: ${{ toJSON(github.event.client_payload) }}
+        run: node scripts/render/render-server.js
+
+      - name: Upload Finished Video
+        uses: actions/upload-artifact@v4
+        with:
+          name: finished-video
+          path: output.mp4

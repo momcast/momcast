@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large Media & Render Artifacts
+public/images/*.mp4
+public/images/*.mov
+public/images/*.avi
+scripts/render/frames/
+output.mp4
