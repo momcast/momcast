@@ -1170,7 +1170,9 @@ export default function App() {
                             backgroundColor: s.backgroundColor || '#ffffff',
                             cropRect: { top: 0, right: 0, bottom: 0, left: 0 },
                             stickers: [],
-                            drawings: []
+                            drawings: [],
+                             width: s.width,
+                             height: s.height
                           }))
                         });
                         setActiveTemplate(tmpl);
