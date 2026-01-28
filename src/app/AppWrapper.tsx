@@ -1720,7 +1720,8 @@ export default function App() {
                               projectName: project.projectName,
                               contactInfo: phoneNumber,
                               userImages,
-                              userTexts
+                              userTexts,
+                              scenes: project.userScenes.map(s => ({ id: s.id, aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName }))
                             })
                           });
 

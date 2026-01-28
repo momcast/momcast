@@ -6,7 +6,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
 const projectData = JSON.parse(process.env.PROJECT_DATA || '{}');
-const { templateUrl, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
+const { templateUrl, userImages, userTexts, requestId, contactInfo, projectName, scenes } = projectData;
 
 // Supabase Configuration
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -77,21 +77,35 @@ async function render() {
         const fullTemplate = await res.json();
         console.log(`✅ Template fetched (${JSON.stringify(fullTemplate).length} bytes)`);
 
-        // 2. 모든 컴포지션 로그 출력
-        console.log('\n📋 All compositions in template:');
-        fullTemplate.assets.forEach((a, idx) => {
-            if (a.layers) {
-                console.log(`  [${idx}] ${a.nm} (w:${a.w}, h:${a.h}, layers:${a.layers.length})`);
-            }
-        });
+        // 2. 씬 정보로 컴포지션 필터링
+        let sceneComps = [];
 
-        // 3. 씬 컴포지션 찾기 (layers를 가진 모든 컴포지션)
-        const sceneComps = fullTemplate.assets.filter(a => a.layers && a.layers.length > 0);
+        if (scenes && scenes.length > 0) {
+            console.log(`\n📦 Using ${scenes.length} scenes from project data`);
+            sceneComps = scenes.map(scene => {
+                const comp = fullTemplate.assets.find(a => a.id === scene.id);
+                if (!comp) {
+                    console.warn(`⚠️ Scene composition not found: ${scene.id}`);
+                }
+                return comp;
+            }).filter(c => c != null);
+        } else {
+            // Fallback: 모든 컴포지션 로그 출력
+            console.log('\n📋 No scene data provided. All compositions:');
+            fullTemplate.assets.forEach((a, idx) => {
+                if (a.layers) {
+                    console.log(`  [${idx}] ${a.nm} (id:${a.id}, w:${a.w}, h:${a.h}, layers:${a.layers.length})`);
+                }
+            });
 
-        console.log(`\n📦 Using ${sceneComps.length} compositions for rendering`);
+            // layers를 가진 컴포지션만 사용
+            sceneComps = fullTemplate.assets.filter(a => a.layers && a.layers.length > 0);
+        }
+
+        console.log(`\n🎬 Rendering ${sceneComps.length} scenes`);
 
         if (sceneComps.length === 0) {
-            throw new Error('No compositions with layers found in template');
+            throw new Error('No scenes to render');
         }
 
         await updateProgress(5);

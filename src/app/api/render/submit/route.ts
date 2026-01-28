@@ -4,9 +4,9 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { requestId, projectId, template, userImages, userTexts, projectName, contactInfo } = body;
+        const { requestId, projectId, template, userImages, userTexts, projectName, contactInfo, scenes } = body;
 
-        console.log(`[Render Submit] 🚀 Starting GitHub Action render job:`, { requestId, projectId, projectName });
+        console.log(`[Render Submit] 🚀 Starting GitHub Action render job:`, { requestId, projectId, projectName, sceneCount: scenes?.length });
 
         if (!supabaseAdmin) {
             console.error("❌ Database configuration missing (supabaseAdmin)");
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
                     requestId,
                     contactInfo,
                     projectName,
+                    scenes,
                     callbackUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/render/webhook`,
                     timestamp: new Date().toISOString()
                 }
