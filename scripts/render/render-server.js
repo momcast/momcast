@@ -76,6 +76,7 @@ async function render() {
 
         const fullTemplate = await res.json();
         console.log(`✅ Template fetched (${JSON.stringify(fullTemplate).length} bytes)`);
+        console.log(`\n📦 Received scene data:`, JSON.stringify(scenes));
 
         // 2. 씬 정보로 컴포지션 필터링
         let sceneComps = [];

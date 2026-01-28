@@ -1710,6 +1710,13 @@ export default function App() {
                           });
 
                           // 2. 렌더링 작업 등록 (ID와 메타데이터만 포함하여 64KB 한도 회피)
+                          // 씬 정보 생성
+                          const scenesData = project.userScenes.map(s => ({
+                            id: s.id,
+                            aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName
+                          }));
+                          console.log('🎬 Scenes to render:', scenesData);
+
                           const submitRes = await fetch('/api/render/submit', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -1721,7 +1728,7 @@ export default function App() {
                               contactInfo: phoneNumber,
                               userImages,
                               userTexts,
-                              scenes: project.userScenes.map(s => ({ id: s.id, aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName }))
+                              scenes: scenesData
                             })
                           });
 
