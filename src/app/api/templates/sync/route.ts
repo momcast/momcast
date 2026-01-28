@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Templates directory not found" }, { status: 404 });
         }
 
-        const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.endsWith('.json'));
+        const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.toLowerCase().endsWith('.json'));
+        console.log(`[Sync] Found ${files.length} JSON files in ${TEMPLATES_DIR}:`, files);
         const results = [];
 
         for (const file of files) {
@@ -31,18 +32,24 @@ export async function POST(req: NextRequest) {
                 const { w, h, nm, assets, layers: topLayers } = data;
 
                 // 1. 장면(사진 컴포지션) 분석 (사진01, 사진02 ... 또는 image_0...)
-                const photoComps = (assets || []).filter((a: any) =>
-                    a.layers && (a.nm?.includes('사진') || a.nm?.toLowerCase().includes('image'))
+                let scenesBase = (assets || []).filter((a: any) =>
+                    a.layers && (a.nm?.includes('사진') || a.nm?.toLowerCase().includes('image') || a.nm?.toLowerCase().includes('photo'))
                 );
 
-                // 이름 순으로 정렬 (사진01, 사진02...)
-                photoComps.sort((a: any, b: any) => (a.nm || "").localeCompare(b.nm || "", undefined, { numeric: true, sensitivity: 'base' }));
-
-                // 만약 사진 컴포지션이 없다면 기존 방식(image_X 에셋)으로 폴백
-                let scenesBase = photoComps;
+                // 만약 특정 키워드 compositions가 없다면, layers가 있는 모든 assets(compositions)를 후보로 검토
                 if (scenesBase.length === 0) {
-                    scenesBase = (assets || []).filter((a: any) => a.id && a.id.startsWith('image_'));
+                    scenesBase = (assets || []).filter((a: any) => a.layers && (a.nm || a.id));
+                    console.log(`[Sync] No photo/image comps found. Found ${scenesBase.length} total compositions.`);
                 }
+
+                // 만약 위에서도 안 나오면 기존 방식(image_X 에셋)으로 폴백
+                if (scenesBase.length === 0) {
+                    scenesBase = (assets || []).filter((a: any) => a.id && (a.id.startsWith('image_') || a.p?.includes('img_')));
+                    console.log(`[Sync] Falling back to image assets: ${scenesBase.length} found.`);
+                }
+
+                // 이름 순으로 정렬
+                scenesBase.sort((a: any, b: any) => (a.nm || a.id || "").localeCompare(b.nm || b.id || "", undefined, { numeric: true, sensitivity: 'base' }));
 
                 const sceneCount = scenesBase.length || 1;
 
@@ -112,13 +119,17 @@ export async function POST(req: NextRequest) {
                     updated_at: new Date().toISOString()
                 };
 
+                console.log(`[Sync] Upserting template: ${templateId}, scenes: ${scenes.length}`);
+
                 const { error: upsertError } = await supabase
                     .from('templates')
                     .upsert(templateData);
 
                 if (upsertError) {
+                    console.error(`[Sync] Upsert failed for ${file}:`, upsertError);
                     results.push({ file, status: 'error', message: upsertError.message });
                 } else {
+                    console.log(`[Sync] Successfully synced ${file}`);
                     results.push({ file, status: 'success', sceneCount });
                 }
 
@@ -127,7 +138,8 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, results });
+        const anyError = results.some(r => r.status === 'error');
+        return NextResponse.json({ success: !anyError, results }, { status: anyError ? 400 : 200 });
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }

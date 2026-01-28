@@ -1126,11 +1126,13 @@ export default function App() {
                       if (!confirm('JSON 파일들로부터 템플릿 정보를 동기화하시겠습니까?')) return;
                       try {
                         const res = await fetch('/api/templates/sync', { method: 'POST' });
-                        if (res.ok) {
+                        const data = await res.json();
+                        if (res.ok && data.success) {
                           alert('동기화 완료!');
                           getTemplates().then(setTemplates);
                         } else {
-                          alert('동기화 실패');
+                          const errorMsg = data.results?.find((r: any) => r.status === 'error')?.message || data.error || '알 수 없는 오류';
+                          alert(`동기화 실패: ${errorMsg}`);
                         }
                       } catch (e) {
                         alert('오류 발생');
@@ -1171,8 +1173,8 @@ export default function App() {
                             cropRect: { top: 0, right: 0, bottom: 0, left: 0 },
                             stickers: [],
                             drawings: [],
-                             width: s.width,
-                             height: s.height
+                            width: s.width,
+                            height: s.height
                           }))
                         });
                         setActiveTemplate(tmpl);
