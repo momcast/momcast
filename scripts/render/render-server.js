@@ -137,8 +137,18 @@ async function render() {
         const outputPath = path.join(process.cwd(), 'output.mp4');
         console.log("🎬 Encoding video with FFmpeg...");
 
-        // 프레임 경로가 올바른지 확인 (CI 환경 대응)
-        const framePattern = path.join(__dirname, 'frames', 'frame_%05d.jpg');
+        // 프레임 파일 확인
+        const frameFiles = fs.readdirSync(framesDir).filter(f => f.endsWith('.jpg'));
+        console.log(`📸 Found ${frameFiles.length} frame files in ${framesDir}`);
+
+        if (frameFiles.length === 0) {
+            throw new Error("No frames were generated!");
+        }
+
+        // FFmpeg는 Unix 스타일 경로를 선호함 (Windows에서도)
+        const framePattern = path.join(framesDir, 'frame_%05d.jpg').replace(/\\/g, '/');
+        console.log(`🎥 FFmpeg input pattern: ${framePattern}`);
+
         execSync(`ffmpeg -framerate ${template.fr || 30} -i "${framePattern}" -c:v libx264 -pix_fmt yuv420p -y "${outputPath}"`);
         console.log(`✅ Complete: ${outputPath}`);
 
