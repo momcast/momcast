@@ -57,7 +57,7 @@ const ScenePreview: React.FC<{
   isAdmin?: boolean;
   className?: string;
   hideOverlay?: boolean;
-}> = ({ scene, adminConfig, isAdmin, className = "", hideOverlay = false }) => {
+}> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false }) => {
   const displayScene = scene;
   const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
 
@@ -95,6 +95,7 @@ const ScenePreview: React.FC<{
           <img
             src={userImageUrl}
             alt="User Scene"
+            loading="lazy"
             className="w-full h-full object-contain pointer-events-none"
             style={{ clipPath: `inset(${crop.top}% ${crop.right}% ${crop.bottom}% ${crop.left}%)` }}
           />
@@ -110,7 +111,7 @@ const ScenePreview: React.FC<{
             clipPath: `inset(${oCrop.top}% ${oCrop.right}% ${oCrop.bottom}% ${oCrop.left}%)`
           }}
         >
-          <img src={activeOverlay} alt="Overlay" className="w-full h-full object-contain pointer-events-none" />
+          <img src={activeOverlay} alt="Overlay" loading="lazy" className="w-full h-full object-contain pointer-events-none" />
         </div>
       )}
 
@@ -136,7 +137,7 @@ const ScenePreview: React.FC<{
               className="absolute pointer-events-none"
               style={{ left: `${s.x}%`, top: `${s.y}%`, transform: `translate(-50%, -50%) scale(${s.scale})` }}
             >
-              <img src={s.src} alt="Sticker" className="w-16 h-16 md:w-20 md:h-20 object-contain pointer-events-none" />
+              <img src={s.src} alt="Sticker" loading="lazy" className="w-16 h-16 md:w-20 md:h-20 object-contain pointer-events-none" />
             </div>
           ) : null
         ))}
@@ -812,19 +813,39 @@ export default function App() {
     }
   }, [session, status]);
 
-  // 템플릿 로드 (Supabase에서 실시간 조회)
-  useEffect(() => {
-    getTemplates().then(setTemplates);
-  }, []);
-
-  // 사용자 프로젝트 로드 (만료 시간 체크 및 유효성 검사)
+  // 템플릿 및 사용자 데이터 로드 (캐싱 포함)
   useEffect(() => {
     if (user) {
+      // 1. 캐시에서 템플릿 먼저 로드 (빠른 초기 렌더링)
+      const cachedTemplates = localStorage.getItem('momcast_templates_cache');
+      const cacheTimestamp = localStorage.getItem('momcast_templates_cache_time');
+      const CACHE_DURATION = 5 * 60 * 1000; // 5분
+
+      if (cachedTemplates && cacheTimestamp) {
+        const elapsed = Date.now() - parseInt(cacheTimestamp);
+        if (elapsed < CACHE_DURATION) {
+          setTemplates(JSON.parse(cachedTemplates));
+        }
+      }
+
+      // 2. 백그라운드에서 최신 데이터 가져오기
+      getTemplates().then(data => {
+        setTemplates(data);
+        localStorage.setItem('momcast_templates_cache', JSON.stringify(data));
+        localStorage.setItem('momcast_templates_cache_time', Date.now().toString());
+      });
+
       getUserProjects().then(setUserProjects);
-      getUserRequests().then(setUserRequests);
+
+      if (user.role === 'admin') {
+        getAdminRequests().then(setAdminRequests);
+      } else {
+        getUserRequests().then(setUserRequests);
+      }
     } else {
       setUserProjects([]);
       setUserRequests([]);
+      setAdminRequests([]);
     }
   }, [user]);
 
