@@ -1340,7 +1340,7 @@ export default function App() {
                               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">요청 상태</span>
                                 <span className={`text-[10px] font-black uppercase ${(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed')
-                                    ? 'text-green-500' : 'text-[#ffb3a3]'
+                                  ? 'text-green-500' : 'text-[#ffb3a3]'
                                   }`}>
                                   {(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed') ? '완료' : '처리 중'}
                                 </span>
@@ -1457,76 +1457,11 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {req.status !== 'completed' ? (
-                      <div className="flex items-center gap-2">
-                        <label className="cursor-pointer px-6 py-3 bg-[#ffb3a3] text-white rounded-full font-black text-[10px] uppercase shadow-md hover:scale-105 transition-all flex items-center gap-2">
-                          <Icons.Upload /> 파일 업로드
-                          <input
-                            type="file"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              if (!confirm('가공된 시안을 업로드하고 사용자에게 알림을 보낼까요?')) return;
-
-                              try {
-                                const url = await uploadImage(file);
-                                await updateRequestStatus(req.id, 'completed', url);
-                                await sendDraftCompletionNotification(req.contactInfo, req.projectName);
-
-                                // 구글 시트 상태 업데이트 (백그라운드)
-                                fetch('/api/gdrive/update-status', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ requestId: req.id, status: '완료', resultUrl: url })
-                                }).catch(err => console.error('Sheet update failed:', err));
-
-                                alert('시안 업로드 및 알림 전송이 완료되었습니다!');
-                                // 리스트 갱신
-                                getAdminRequests().then(setAdminRequests);
-                              } catch (err) {
-                                console.error(err);
-                                alert('처리 중 오류가 발생했습니다.');
-                              }
-                            }}
-                          />
-                        </label>
-                        <button
-                          onClick={async () => {
-                            const url = prompt('영상 또는 시안의 URL(Vimeo, G-Drive 등)을 입력해주세요:');
-                            if (!url) return;
-                            if (confirm(`${url} 링크를 등록하고 사용자에게 알림을 보낼까요?`)) {
-                              try {
-                                await updateRequestStatus(req.id, 'completed', url);
-                                await sendDraftCompletionNotification(req.contactInfo, req.projectName);
-
-                                // 구글 시트 상태 업데이트 (백그라운드)
-                                fetch('/api/gdrive/update-status', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ requestId: req.id, status: '완료', resultUrl: url })
-                                }).catch(err => console.error('Sheet update failed:', err));
-
-                                alert('링크 등록 및 알림 전송이 완료되었습니다!');
-                                getAdminRequests().then(setAdminRequests);
-                              } catch (err) {
-                                console.error(err);
-                                alert('처리 중 오류가 발생했습니다.');
-                              }
-                            }
-                          }}
-                          className="px-6 py-3 bg-gray-900 text-white rounded-full font-black text-[10px] uppercase shadow-md hover:scale-105 transition-all"
-                        >
-                          링크 등록
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="px-6 py-3 bg-gray-100 text-gray-400 rounded-full font-black text-[10px] uppercase">처리 완료</span>
-                        {req.resultUrl && (
-                          <a href={req.resultUrl} target="_blank" rel="noreferrer" className="p-3 bg-white border border-gray-100 rounded-full text-gray-400 hover:text-gray-900 shadow-sm"><Icons.ExternalLink /></a>
-                        )}
-                      </div>
+                    <span className={`px-6 py-3 rounded-full font-black text-[10px] uppercase ${req.renderStatus === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
+                      {req.renderStatus === 'completed' ? '처리 완료' : (req.renderStatus === 'processing' ? '일하는 중...' : '대기 중')}
+                    </span>
+                    {req.videoUrl && (
+                      <a href={req.videoUrl} target="_blank" rel="noreferrer" className="p-3 bg-white border border-gray-100 rounded-full text-gray-400 hover:text-gray-900 shadow-sm"><Icons.ExternalLink /></a>
                     )}
                     <button className="p-4 bg-gray-50 text-gray-400 rounded-full hover:bg-gray-100 transition-all"><Icons.Edit /></button>
                   </div>
@@ -1731,19 +1666,54 @@ export default function App() {
                     if (requestModal.type === 'draft') {
                       console.log('📤 Triggering Auto-Render & G-Drive Sync for request:', requestId);
 
-                      // 1. 렌더링 작업 등록
-                      fetch('/api/render/submit', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          requestId,
-                          projectId: project.id,
-                          scenes: project.userScenes,
-                          templateId: project.templateId
-                        })
-                      }).catch(err => console.error('❌ Render Submit Failed:', err));
+                      // 1. 데이터 가공 (기존 triggerCloudRender 로직 통합)
+                      const prepareAndSubmit = async () => {
+                        try {
+                          // 템플릿 JSON 로드
+                          const tRes = await fetch(`/templates/${project.templateId}.json`);
+                          if (!tRes.ok) throw new Error("템플릿 파일을 찾을 수 없습니다.");
+                          const templateJson = await tRes.json();
 
-                      // 2. 구글 드라이브 동기화 (기존 로직 유지)
+                          const userImages: Record<string, string> = {};
+                          const userTexts: Record<string, string> = {};
+
+                          project.userScenes.forEach((scene, idx) => {
+                            if (scene.userImageUrl) {
+                              userImages[`image_${idx}`] = scene.userImageUrl;
+                            }
+
+                            // AE 레이어 이름 매핑
+                            // activeTemplate가 상위 템플릿 정보를 가지고 있다고 가정
+                            const adminScene = activeTemplate?.scenes.find(s => s.id === scene.id);
+                            const key = adminScene?.aeLayerName || `text_${idx}`;
+
+                            if (scene.content && scene.content.trim() !== "") {
+                              userTexts[key] = scene.content;
+                            }
+                          });
+
+                          // 2. 렌더링 작업 등록 (전체 데이터 포함)
+                          await fetch('/api/render/submit', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              requestId,
+                              projectId: project.id,
+                              projectName: project.projectName,
+                              contactInfo: phoneNumber,
+                              template: templateJson,
+                              userImages,
+                              userTexts
+                            })
+                          });
+                        } catch (err) {
+                          console.error('❌ Render Submit Failed:', err);
+                        }
+                      };
+
+                      prepareAndSubmit();
+
+                      // 3. 구글 드라이브 동기화 (기존 로직 유지)
                       fetch('/api/gdrive/sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
