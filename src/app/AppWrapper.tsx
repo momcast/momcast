@@ -144,7 +144,7 @@ const ScenePreview: React.FC<{
       </div>
     </div>
   );
-};
+}); // React.memo close
 
 const ColorPickerRainbow: React.FC<{ currentColor: string; onColorChange: (color: string) => void }> = ({ currentColor, onColorChange }) => {
   const baseColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#8B00FF', '#000000', '#FFFFFF'];
