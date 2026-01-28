@@ -82,10 +82,24 @@ async function render() {
     if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir);
 
     const totalFrames = template.op - template.ip;
+    let lastReportedProgress = -1;
+
     for (let i = 0; i < totalFrames; i++) {
         await page.evaluate((frame) => { window.animation.goToAndStop(frame, true); }, i);
         await page.screenshot({ path: path.join(framesDir, `frame_${i.toString().padStart(5, '0')}.jpg`), type: 'jpeg', quality: 90 });
-        if (i % 30 === 0) console.log(`Progress: ${i}/${totalFrames}`);
+
+        // 진행률 업데이트 (10% 단위로 DB 부하 최소화)
+        const currentProgress = Math.floor((i / totalFrames) * 100);
+        if (currentProgress >= lastReportedProgress + 10 && requestId && supabase) {
+            await supabase.from('requests').update({
+                render_progress: currentProgress,
+                updated_at: new Date().toISOString()
+            }).eq('id', requestId);
+            lastReportedProgress = currentProgress;
+            console.log(`[Progress Update] ${currentProgress}%`);
+        } else if (i % 30 === 0) {
+            console.log(`Progress: ${i}/${totalFrames} (${currentProgress}%)`);
+        }
     }
     await browser.close();
 

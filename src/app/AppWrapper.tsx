@@ -842,6 +842,21 @@ export default function App() {
     }
   }, [session, status]);
 
+  // 렌더링 중인 요청이 있을 경우 스마트 폴링 (10초 간격)
+  useEffect(() => {
+    const hasProcessing = userRequests.some(r => r.renderStatus === 'processing');
+    if (!hasProcessing) return;
+
+    const interval = setInterval(() => {
+      console.log('🔄 Polling for render progress...');
+      getUserRequests().then(setUserRequests);
+      // 관리자라면 관리자 목록도 갱신
+      if (user?.role === 'admin') getAdminRequests().then(setAdminRequests);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [userRequests, user]);
+
   // 템플릿 및 사용자 데이터 로드 (캐싱 포함)
   useEffect(() => {
     if (user) {
@@ -1346,7 +1361,7 @@ export default function App() {
                                   {(() => {
                                     const req = userRequests.find(r => r.projectId === item.id);
                                     if (req?.renderStatus === 'completed' || req?.status === 'completed') return '완료';
-                                    if (req?.renderStatus === 'processing') return '일하는 중...';
+                                    if (req?.renderStatus === 'processing') return `일하는 중...(${req.renderProgress || 0}%)`;
                                     return '대기 중';
                                   })()}
                                 </span>
@@ -1465,7 +1480,7 @@ export default function App() {
                   <div className="flex gap-2">
                     <span className={`px-6 py-3 rounded-full font-black text-[10px] uppercase ${req.renderStatus === 'completed' ? 'bg-green-100 text-green-600' : (req.renderStatus === 'processing' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400')
                       }`}>
-                      {req.renderStatus === 'completed' ? '완료' : (req.renderStatus === 'processing' ? '일하는 중...' : '대기 중')}
+                      {req.renderStatus === 'completed' ? '완료' : (req.renderStatus === 'processing' ? `일하는 중...(${req.renderProgress || 0}%)` : '대기 중')}
                     </span>
                     {req.videoUrl && (
                       <a href={req.videoUrl} target="_blank" rel="noreferrer" className="p-3 bg-white border border-gray-100 rounded-full text-gray-400 hover:text-gray-900 shadow-sm"><Icons.ExternalLink /></a>

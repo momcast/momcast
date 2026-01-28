@@ -91,6 +91,7 @@ export interface UserRequest {
   type: 'draft' | 'final';
   status: 'pending' | 'processing' | 'completed';
   renderStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  renderProgress?: number;
   videoUrl?: string;
   renderedAt?: string;
   contactInfo: string;
