@@ -105,8 +105,9 @@ async function render() {
             });
         </script></body></html>`;
 
-        await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
-        await page.waitForFunction('window.isLottieReady === true', { timeout: 30000 });
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 90000 });
+        console.log("⏳ Waiting for Lottie animation to initialize...");
+        await page.waitForFunction('window.isLottieReady === true', { timeout: 120000 });
 
         const framesDir = path.join(__dirname, 'frames');
         if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir);
