@@ -598,6 +598,24 @@ const SceneEditor: React.FC<{
         </div>
 
         <aside className="flex-1 md:w-[420px] bg-white border-l border-gray-100 flex flex-col min-h-0 shrink-0 relative overflow-hidden">
+          {/* 템플릿 합성 미리보기 */}
+          <div className="m-4 md:m-6 mb-0 shrink-0">
+            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider">최종 미리보기</span>
+                <span className="text-[8px] text-gray-400">템플릿 적용 결과</span>
+              </div>
+              <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200" style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}>
+                <ScenePreview
+                  scene={{ ...currentScene, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }}
+                  adminConfig={isAdminMode ? undefined : adminScene}
+                  isAdmin={isAdminMode}
+                  hideOverlay={false}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex bg-gray-100 p-2 m-4 md:m-6 rounded-2xl shadow-inner border border-gray-50 shrink-0">
             <button
               onClick={() => { setMode('edit'); setIsCropMode(false); }}
