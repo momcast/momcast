@@ -70,7 +70,8 @@ async function render() {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--allow-file-access-from-files' // 로컬 파일 접근 허용
             ],
             headless: 'new' // 최신 headless 모드 사용
         });
@@ -94,129 +95,110 @@ async function render() {
 
         await page.setViewport({ width: template.w, height: template.h });
 
-        // HTTP 서버로 템플릿 제공 (가장 안정적인 방식)
+        // 로컬 HTML 파일 생성 (CORS 문제 해결)
         const templateJson = JSON.stringify(template);
         console.log(`📦 Template size: ${templateJson.length} bytes (${(templateJson.length / 1024 / 1024).toFixed(2)} MB)`);
 
-        // 템플릿 파일 저장
-        const tempTemplateFile = path.join(__dirname, 'temp_template.json');
-        fs.writeFileSync(tempTemplateFile, templateJson);
-        console.log(`💾 Template written to ${tempTemplateFile}`);
-
-        // 간단한 HTTP 서버 시작
-        const server = http.createServer((req, res) => {
-            if (req.url === '/template.json') {
-                res.writeHead(200, {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                });
-                res.end(fs.readFileSync(tempTemplateFile));
-            } else {
-                res.writeHead(404);
-                res.end();
-            }
-        });
-
-        const port = await new Promise((resolve) => {
-            server.listen(0, '127.0.0.1', () => {
-                const p = server.address().port;
-                console.log(`🌐 HTTP server started on port ${p}`);
-                resolve(p);
-            });
-        });
-
-        const templateServUrl = `http://127.0.0.1:${port}/template.json`;
-
         const lottieCdn = 'https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js';
 
-        const htmlContent = `
-        <html>
-        <head>
-            <script src="${lottieCdn}"></script>
-        </head>
-        <body style="margin:0; background:black;">
-            <div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
-            <script>
-                console.log('Loading animation from HTTP server...');
-                
-                const animation = lottie.loadAnimation({
-                    container: document.getElementById('lottie'),
-                    renderer: 'canvas',
-                    loop: false,
-                    autoplay: false,
-                    path: '${templateServUrl}'
+        const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+    <script src="${lottieCdn}"></script>
+</head>
+<body style="margin:0; background:black;">
+    <div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
+    <script>
+        const templateData = ${templateJson};
+        
+        console.log('Loading animation...');
+        
+        const animation = lottie.loadAnimation({
+            container: document.getElementById('lottie'),
+            renderer: 'canvas',
+            loop: false,
+            autoplay: false,
+            animationData: templateData
+        });
+        
+        console.log('loadAnimation called');
+        
+        animation.addEventListener('config_ready', () => {
+            console.log('config_ready');
+        });
+        
+        animation.addEventListener('data_ready', () => {
+            console.log('data_ready');
+        });
+        
+        animation.addEventListener('DOMLoaded', () => {
+            console.log('DOMLoaded');
+            try {
+                const userImages = ${JSON.stringify(userImages || {})};
+                const userTexts = ${JSON.stringify(userTexts || {})};
+                animation.assets.forEach(asset => { 
+                    if(userImages[asset.id]) { 
+                        asset.p = userImages[asset.id]; 
+                        asset.u = ''; 
+                    } 
                 });
-                
-                console.log('loadAnimation called');
-                
-                animation.addEventListener('config_ready', () => {
-                    console.log('Lottie config_ready');
-                });
-                
-                animation.addEventListener('data_ready', () => {
-                    console.log('Lottie data_ready');
-                });
-                
-                animation.addEventListener('DOMLoaded', () => {
-                    console.log('Lottie DOMLoaded');
-                    try {
-                        const userImages = ${JSON.stringify(userImages || {})};
-                        const userTexts = ${JSON.stringify(userTexts || {})};
-                        animation.assets.forEach(asset => { 
-                            if(userImages[asset.id]) { 
-                                asset.p = userImages[asset.id]; 
-                                asset.u = ''; 
-                            } 
-                        });
-                        const searchLayers = (layers) => {
-                            layers.forEach(layer => {
-                                if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) {
-                                    layer.t.d.k[0].s.t = userTexts[layer.nm];
-                                }
-                                if (layer.layers) searchLayers(layer.layers);
-                            });
-                        };
-                        searchLayers(animation.layers);
-                        window.isLottieReady = true;
-                        console.log('isLottieReady = true');
-                    } catch (err) {
-                        console.error('DOMLoaded error:', err.message);
-                    }
-                });
-                
-                animation.addEventListener('data_failed', () => {
-                    console.error('data_failed');
-                });
-                
-                animation.addEventListener('error', (err) => {
-                    console.error('error:', err);
-                });
-            </script>
-        </body>
-        </html>`;
+                const searchLayers = (layers) => {
+                    layers.forEach(layer => {
+                        if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) {
+                            layer.t.d.k[0].s.t = userTexts[layer.nm];
+                        }
+                        if (layer.layers) searchLayers(layer.layers);
+                    });
+                };
+                searchLayers(animation.layers);
+                window.isLottieReady = true;
+                console.log('isLottieReady = true');
+            } catch (err) {
+                console.error('DOMLoaded error:', err.message);
+           }
+        });
+        
+        animation.addEventListener('data_failed', () => {
+            console.error('data_failed');
+        });
+        
+        animation.addEventListener('error', (err) => {
+            console.error('error:', err);
+        });
+    </script>
+</body>
+</html>`;
 
-        await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 120000 });
-        console.log("⏳ Waiting for Lottie animation to initialize...");
+        //HTML 파일로 저장
+        const tempHtmlFile = path.join(__dirname, 'temp_render.html');
+        fs.writeFileSync(tempHtmlFile, htmlContent);
+        console.log(`💾 HTML saved to ${tempHtmlFile}`);
 
-        // 폴링 방식으로 확인
-        let ready = false; // Corrected typo from 'letready' to 'let ready'
+        // file:// URL로 접근
+        const fileUrl = `file:///${tempHtmlFile.replace(/\\/g, '/')}`;
+        console.log(`🌐 Loading ${fileUrl}`);
+
+        await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 120000 });
+        console.log("⏳ Waiting for Lottie...");
+
+        // 폴링
+        let ready = false;
         const maxAttempts = 360; // 3분
         for (let i = 0; i < maxAttempts; i++) {
             try {
                 ready = await page.evaluate(() => window.isLottieReady === true);
                 if (ready) {
-                    console.log(`✅ Lottie ready after ${(i * 0.5).toFixed(1)}s`);
+                    console.log(`✅ Ready after ${(i * 0.5).toFixed(1)}s`);
                     break;
                 }
             } catch (err) {
-                // 계속 시도
+                // continue
             }
             await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         if (!ready) {
-            server.close();
-            throw new Error('❌ Lottie failed to initialize after 3 minutes');
+            throw new Error('❌ Lottie init failed after 3min');
         }
 
         const framesDir = path.join(__dirname, 'frames');
