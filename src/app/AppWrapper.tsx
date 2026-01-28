@@ -1497,10 +1497,15 @@ export default function App() {
                 <div key={idx} onClick={() => setEditingSceneIdx(idx)} className="bg-white rounded-[2.5rem] overflow-hidden border border-gray-100 hover:shadow-2xl transition-all cursor-pointer group relative shadow-sm w-full">
                   <div
                     className="relative bg-gray-50 flex items-center justify-center overflow-hidden border-b border-gray-50"
-                    style={{ aspectRatio: `${templateDimensions.width} / ${templateDimensions.height}` }}
+                    style={{ aspectRatio: `${(item as any).width || templateDimensions.width} / ${(item as any).height || templateDimensions.height}` }}
                   >
                     <ScenePreview
-                      scene={{ ...item, width: templateDimensions.width, height: templateDimensions.height, content: getInheritedContent(idx) }}
+                      scene={{
+                        ...item,
+                        width: (item as any).width || templateDimensions.width,
+                        height: (item as any).height || templateDimensions.height,
+                        content: getInheritedContent(idx)
+                      }}
                       adminConfig={isAdminMode ? undefined : activeTemplate?.scenes[idx]}
                       isAdmin={isAdminMode}
                       className="group-hover:scale-105 transition-transform duration-500"
@@ -1551,8 +1556,8 @@ export default function App() {
           adminScene={activeTemplate ? activeTemplate.scenes[editingSceneIdx] : {} as AdminScene}
           userScene={{ ... (activeProject ? activeProject.userScenes[editingSceneIdx] : {} as UserScene), content: getInheritedContent(editingSceneIdx) }}
           isAdminMode={isAdminMode}
-          width={templateDimensions.width}
-          height={templateDimensions.height}
+          width={(activeTemplate ? activeTemplate.scenes[editingSceneIdx]?.width : activeProject?.userScenes[editingSceneIdx]?.width) || templateDimensions.width}
+          height={(activeTemplate ? activeTemplate.scenes[editingSceneIdx]?.height : activeProject?.userScenes[editingSceneIdx]?.height) || templateDimensions.height}
           onClose={() => setEditingSceneIdx(null)}
           onSave={(updated) => {
             if (activeProject) {

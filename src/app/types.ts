@@ -39,6 +39,8 @@ export interface BaseScene {
   cropRect: Rect;
   stickers: Sticker[];
   drawings: DrawPath[];
+  width?: number;
+  height?: number;
 }
 
 // 관리자가 설정하는 장면 (가이드용)

@@ -30,11 +30,21 @@ export async function POST(req: NextRequest) {
                 const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
                 const { w, h, nm, assets, layers: topLayers } = data;
 
-                // 1. 이미지 에셋 분석 (image_0, image_1 ...)
-                const imageAssets = (assets || []).filter((a: any) => a.id && a.id.startsWith('image_'));
-                const imageIndices = imageAssets.map((a: any) => parseInt(a.id.split('_')[1])).filter((n: number) => !isNaN(n));
-                const maxImageIdx = imageIndices.length > 0 ? Math.max(...imageIndices) : 0;
-                const sceneCount = maxImageIdx + 1;
+                // 1. 장면(사진 컴포지션) 분석 (사진01, 사진02 ... 또는 image_0...)
+                const photoComps = (assets || []).filter((a: any) =>
+                    a.layers && (a.nm?.includes('사진') || a.nm?.toLowerCase().includes('image'))
+                );
+
+                // 이름 순으로 정렬 (사진01, 사진02...)
+                photoComps.sort((a: any, b: any) => (a.nm || "").localeCompare(b.nm || "", undefined, { numeric: true, sensitivity: 'base' }));
+
+                // 만약 사진 컴포지션이 없다면 기존 방식(image_X 에셋)으로 폴백
+                let scenesBase = photoComps;
+                if (scenesBase.length === 0) {
+                    scenesBase = (assets || []).filter((a: any) => a.id && a.id.startsWith('image_'));
+                }
+
+                const sceneCount = scenesBase.length || 1;
 
                 // 2. 텍스트 레이어 및 범위 분석 (텍스트12~13 등)
                 const textRangeMap: Record<number, { isFirst: boolean, range: string }> = {};
@@ -52,7 +62,7 @@ export async function POST(req: NextRequest) {
                             } else {
                                 const singleMatch = l.nm.match(/(\d+)/);
                                 if (singleMatch) {
-                                    const idx = parseInt(singleMatch[1]);
+                                    const idx = parseInt(singleMatch[singleMatch.length - 1]); // 가장 마지막 숫자 사용 (텍스트last31 등 대응)
                                     textRangeMap[idx] = { isFirst: true, range: l.nm };
                                 }
                             }
@@ -65,11 +75,17 @@ export async function POST(req: NextRequest) {
                 (assets || []).forEach((a: any) => { if (a.layers) scanLayers(a.layers); });
 
                 // 3. 장면 데이터 생성
-                const scenes = [];
-                for (let i = 0; i <= maxImageIdx; i++) {
-                    const textInfo = textRangeMap[i];
-                    scenes.push({
-                        id: `scene_${i}`,
+                const scenes = scenesBase.map((item: any, idx: number) => {
+                    // 이름에서 번호 추출 (없으면 인덱스 + 1)
+                    const numMatch = item.nm?.match(/\d+/);
+                    const sceneNum = numMatch ? parseInt(numMatch[0]) : idx + 1;
+                    const textInfo = textRangeMap[sceneNum];
+
+                    return {
+                        id: item.id || `scene_${idx}`,
+                        name: item.nm || `장면 ${idx + 1}`,
+                        width: item.w || w,
+                        height: item.h || h,
                         rotation: 0,
                         zoom: 1,
                         position: { x: 50, y: 50 },
@@ -78,13 +94,13 @@ export async function POST(req: NextRequest) {
                         cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
                         stickers: [],
                         drawings: [],
-                        aeLayerName: textInfo?.range || `text_${i}`,
-                        defaultContent: textInfo?.isFirst ? `${i}번 문구 입력` : "",
+                        aeLayerName: textInfo?.range || `text_${sceneNum}`,
+                        defaultContent: textInfo?.isFirst ? `${sceneNum}번 문구 입력` : "",
                         allowUserUpload: true,
-                        allowUserText: textInfo ? textInfo.isFirst : false, // 이어지는 번호의 첫 번째만 텍스트 허용
+                        allowUserText: textInfo ? textInfo.isFirst : false,
                         allowUserDecorate: true
-                    });
-                }
+                    };
+                });
 
                 const templateData = {
                     id: templateId,
