@@ -767,7 +767,18 @@ const SceneEditor: React.FC<{
             )}
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-50 z-20">
-            <button onClick={() => onSave(currentScene)} className="w-full py-5 bg-[#03C75A] text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.3em]">장면 저장하기</button>
+            <button
+              onClick={() => {
+                // 사용자 모드일 때는 관리자 오버레이(overlayUrl) 제외
+                const sceneToSave = isAdminMode
+                  ? currentScene
+                  : { ...currentScene, overlayUrl: undefined };
+                onSave(sceneToSave);
+              }}
+              className="w-full py-5 bg-[#03C75A] text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.3em]"
+            >
+              장면 저장하기
+            </button>
           </div>
         </aside>
       </div>
