@@ -2,17 +2,30 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const { execSync } = require('child_process');
+const { createClient } = require('@supabase/supabase-js');
 
 const projectData = JSON.parse(process.env.PROJECT_DATA || '{}');
-const { template, userImages, userTexts } = projectData;
+const { template, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
 
 if (!template) {
     console.error("No template data provided.");
     process.exit(1);
 }
 
+// Supabase Configuration
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
+
 async function render() {
     console.log("🚀 Starting Cloud Rendering...");
+    if (requestId) {
+        console.log(`📌 Processing Request ID: ${requestId}`);
+        if (supabase) {
+            await supabase.from('requests').update({ status: 'processing' }).eq('id', requestId);
+        }
+    }
+
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
     const page = await browser.newPage();
     await page.setViewport({ width: template.w, height: template.h });
@@ -59,8 +72,44 @@ async function render() {
     await browser.close();
 
     try {
-        execSync(`ffmpeg -framerate ${template.fr || 30} -i scripts/render/frames/frame_%05d.jpg -c:v libx264 -pix_fmt yuv420p -y output.mp4`);
-        console.log("✅ Complete: output.mp4");
-    } catch (err) { console.error("FFmpeg Error:", err); }
+        const outputPath = path.join(process.cwd(), 'output.mp4');
+        execSync(`ffmpeg -framerate ${template.fr || 30} -i scripts/render/frames/frame_%05d.jpg -c:v libx264 -pix_fmt yuv420p -y "${outputPath}"`);
+        console.log(`✅ Complete: ${outputPath}`);
+
+        if (supabase && fs.existsSync(outputPath)) {
+            console.log("📤 Uploading to Supabase Storage...");
+            const fileName = `render_${requestId || Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+            const fileBuffer = fs.readFileSync(outputPath);
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('renders')
+                .upload(fileName, fileBuffer, { contentType: 'video/mp4' });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage.from('renders').getPublicUrl(fileName);
+            console.log(`🎥 Video URL: ${publicUrl}`);
+
+            if (requestId) {
+                await supabase.from('requests').update({
+                    status: 'completed',
+                    result_url: publicUrl
+                }).eq('id', requestId);
+                console.log(`✅ Supabase Status Updated for request ${requestId}`);
+
+                // Send Notification (Optional trigger)
+                if (contactInfo) {
+                    console.log(`[Notification] Completion alert would be sent to ${contactInfo}`);
+                    // In a real environment, you might hit a webhook or internal API
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Rendering Process Error:", err);
+        if (supabase && requestId) {
+            await supabase.from('requests').update({ status: 'pending' }).eq('id', requestId);
+        }
+        process.exit(1);
+    }
 }
 render().catch(err => { console.error(err); process.exit(1); });

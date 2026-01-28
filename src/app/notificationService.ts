@@ -15,3 +15,16 @@ export const sendDraftCompletionNotification = async (contactInfo: string, proje
 
     return true;
 };
+
+export const sendAdminOrderNotification = async (orderData: { requestId: string, projectName: string, userEmail: string, type: string }) => {
+    console.log(`[Admin Notification] New high-priority order! Project: "${orderData.projectName}" by ${orderData.userEmail} (${orderData.type})`);
+
+    // In a real implementation:
+    // 1. Send email to admin (e.g., using SendGrid, Resend, or Nodemailer)
+    // 2. Alert in Slack/Discord
+
+    // Simulation:
+    // await fetch('/api/admin/notify', { method: 'POST', body: JSON.stringify(orderData) });
+
+    return true;
+};

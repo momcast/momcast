@@ -26,6 +26,8 @@ jobs:
       - name: Run Render Script
         env:
           PROJECT_DATA: ${{ toJSON(github.event.client_payload) }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/render/render-server.js
 
       - name: Upload Finished Video

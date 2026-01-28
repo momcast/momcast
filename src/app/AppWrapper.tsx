@@ -8,7 +8,8 @@ import {
   saveProject, getUserProjects, updateRequestStatus, getUserRequests, deleteProject,
   getAdminRequests, saveUserRequest
 } from './dbService';
-import { sendDraftCompletionNotification } from './notificationService';
+import { sendDraftCompletionNotification, sendAdminOrderNotification } from './notificationService';
+import { requestNaverPay } from './paymentService';
 import { VideoEngine } from '../components/VideoEngine';
 import { uploadImage } from './firebase'
 import {
@@ -51,13 +52,14 @@ const transparencyGridStyle = {
 };
 
 const ScenePreview: React.FC<{
-  scene: BaseScene & { userImageUrl?: string; overlayUrl?: string; isEditing?: boolean };
+  scene: BaseScene & { userImageUrl?: string; overlayUrl?: string; isEditing?: boolean; width?: number; height?: number; content?: string };
   adminConfig?: AdminScene;
   isAdmin?: boolean;
   className?: string;
-}> = ({ scene, adminConfig, isAdmin, className = "" }) => {
+  hideOverlay?: boolean;
+}> = ({ scene, adminConfig, isAdmin, className = "", hideOverlay = false }) => {
   const displayScene = scene;
-  const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene); // fallback if it's admin scene itself
+  const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
 
   const crop = displayScene.cropRect || { top: 0, left: 0, right: 0, bottom: 0 };
   const userImageUrl = displayScene.userImageUrl;
@@ -72,14 +74,17 @@ const ScenePreview: React.FC<{
 
   return (
     <div
-      className={`relative overflow-hidden aspect-video w-full ${className}`}
-      style={displayScene.backgroundMode === 'solid' ? { backgroundColor: displayScene.backgroundColor } : (displayScene.backgroundMode === 'transparent' ? transparencyGridStyle : {})}
+      className={`relative overflow-hidden w-full ${className}`}
+      style={{
+        aspectRatio: `${scene.width || 1920} / ${scene.height || 1080}`,
+        ...(displayScene.backgroundMode === 'solid' ? { backgroundColor: displayScene.backgroundColor } : (displayScene.backgroundMode === 'transparent' ? transparencyGridStyle : {}))
+      }}
     >
       {displayScene.backgroundMode === 'blur' && userImageUrl && (
         <div className="absolute inset-0 scale-125 blur-3xl opacity-30 grayscale pointer-events-none" style={{ backgroundImage: `url(${userImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
       )}
 
-      {!isAdmin && userImageUrl && (
+      {userImageUrl && (
         <div
           className="absolute inset-0 flex items-center justify-center pointer-events-none"
           style={{
@@ -96,7 +101,7 @@ const ScenePreview: React.FC<{
         </div>
       )}
 
-      {activeOverlay && (
+      {activeOverlay && !hideOverlay && (
         <div
           className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center opacity-100"
           style={{
@@ -109,6 +114,15 @@ const ScenePreview: React.FC<{
         </div>
       )}
 
+      {/* Text Overlay */}
+      {scene.content && (
+        <div className="absolute bottom-[10%] left-0 right-0 z-20 flex justify-center pointer-events-none">
+          <p className="bg-black/60 text-white px-6 py-2 rounded-full text-[12px] md:text-sm font-bold backdrop-blur-md shadow-xl border border-white/10 italic">
+            &quot;{scene.content}&quot;
+          </p>
+        </div>
+      )}
+
       <svg className="absolute inset-0 w-full h-full pointer-events-none z-30" viewBox="0 0 100 100" preserveAspectRatio="none">
         {(displayScene.drawings || []).map((d: DrawPath) => (
           <polyline key={d.id} points={d.points.map((pt: { x: number, y: number }) => `${pt.x},${pt.y}`).join(' ')} fill="none" stroke={d.color} strokeWidth={d.width / 15} strokeLinecap="round" strokeLinejoin="round" />
@@ -116,13 +130,6 @@ const ScenePreview: React.FC<{
       </svg>
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
         {(displayScene.stickers || []).map((s: Sticker) => (
-          // We only render simplified view here. For editing, the overlay is handled in parent or we inject handlers?
-          // Actually, ScenePreview is shared. We need to pass down interaction handlers or keep it read-only.
-          // IF isAdmin/Editor mode, we might want to handle it differently.
-          // But ScenePreview acts as a "dumb" renderer in dashboard.
-          // For the Editor, we might need to overlay controls ON TOP of ScenePreview?
-          // OR: We pass a prop "renderStickers={false}" to ScenePreview and render them manually in SceneEditor.
-          // Let's try passing custom renderer or just not rendering them in preview if in edit mode.
           !scene.isEditing ? (
             <div
               key={s.id}
@@ -303,7 +310,9 @@ const SceneEditor: React.FC<{
   isAdminMode: boolean;
   onClose: () => void;
   onSave: (updatedScene: AdminScene | UserScene) => void;
-}> = ({ adminScene, userScene, isAdminMode, onClose, onSave }) => {
+  width?: number;
+  height?: number;
+}> = ({ adminScene, userScene, isAdminMode, onClose, onSave, width, height }) => {
   const [currentScene, setCurrentScene] = useState<AdminScene | UserScene>(() => {
     const base: AdminScene | UserScene = isAdminMode ? adminScene : userScene;
 
@@ -334,6 +343,7 @@ const SceneEditor: React.FC<{
   const [isBrushActive, setIsBrushActive] = useState(false);
   const [currentPath, setCurrentPath] = useState<DrawPath | null>(null);
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+  const [showGuideOverlay, setShowGuideOverlay] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -511,15 +521,17 @@ const SceneEditor: React.FC<{
           <div className="flex-1 p-4 md:p-8 flex items-center justify-center relative overflow-hidden">
             <div
               ref={viewportRef}
-              className={`w-full max-w-4xl aspect-video relative overflow-hidden bg-white shadow-2xl rounded-2xl touch-none select-none border border-gray-200 ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
+              className={`w-full max-w-4xl relative overflow-hidden bg-white shadow-2xl rounded-2xl touch-none select-none border border-gray-200 ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
+              style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}
               onPointerDown={handleViewportPointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
             >
               <ScenePreview
-                scene={{ ...currentScene, isEditing: true }} // Pass flag to hide static stickers relative to ScenePreview
+                scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }} // Pass flag to hide static stickers relative to ScenePreview
                 adminConfig={isAdminMode ? undefined : adminScene}
                 isAdmin={isAdminMode}
+                hideOverlay={!showGuideOverlay}
               />
 
               {mode === 'camera' && (
@@ -603,6 +615,12 @@ const SceneEditor: React.FC<{
                 꾸미기
               </button>
             )}
+            <button
+              onClick={() => setShowGuideOverlay(!showGuideOverlay)}
+              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${!showGuideOverlay ? 'bg-[#ffb3a3] text-white shadow-md' : 'text-gray-400'}`}
+            >
+              결과 보기
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-32">
@@ -825,6 +843,27 @@ export default function App() {
 
   const [activeTemplate, setActiveTemplate] = useState<Template | null>(null);
   const [activeProject, setActiveProject] = useState<UserProject | null>(null);
+  const [templateDimensions, setTemplateDimensions] = useState({ width: 1920, height: 1080 });
+
+  useEffect(() => {
+    const fetchDimensions = async () => {
+      const templateId = activeTemplate?.id || activeProject?.templateId;
+      if (!templateId) return;
+      try {
+        const res = await fetch(`/templates/${templateId}.json`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.w && data.h) {
+            setTemplateDimensions({ width: data.w, height: data.h });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch template dimensions:", e);
+      }
+    };
+    fetchDimensions();
+  }, [activeTemplate?.id, activeProject?.templateId]);
+
   const [editingSceneIdx, setEditingSceneIdx] = useState<number | null>(null);
 
   // Video Rendering State
@@ -847,45 +886,65 @@ export default function App() {
     }
   };
 
-  const handleCloudRender = async () => {
-    if (!lottieTemplate || !activeProject) return;
+  const triggerCloudRender = async (requestId?: string, contactInfo?: string, projectName?: string) => {
+    // Determine which project/template to use
+    const project = activeProject;
+    if (!project) return;
+
     setIsCloudRendering(true);
     try {
-      // Map project data to VideoEngine format
+      // 1. Ensure Lottie template is loaded
+      let template = lottieTemplate;
+      if (!template) {
+        const res = await fetch(`/templates/${project.templateId}.json`);
+        if (!res.ok) throw new Error("템플릿 파일을 찾을 수 없습니다.");
+        template = await res.json();
+        setLottieTemplate(template);
+      }
+
+      // 2. Map project data to assets
       const userImages: Record<string, string> = {};
       const userTexts: Record<string, string> = {};
 
-      activeProject.userScenes.forEach((scene, idx) => {
-        // Assume scene.id or index maps to asset/layer name
+      project.userScenes.forEach((scene, idx) => {
         if (scene.userImageUrl) {
-          // This mapping logic needs to match the Lottie template structure
-          // For template_v1.json, assets are named image_0, image_1...
           userImages[`image_${idx}`] = scene.userImageUrl;
         }
         userTexts[`text_${idx}`] = scene.content || "";
       });
 
+      // 3. Dispatch to Cloud
       const response = await fetch('/api/render/cloud', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          template: lottieTemplate,
+          template,
           userImages,
-          userTexts
+          userTexts,
+          requestId,
+          contactInfo,
+          projectName: projectName || project.projectName
         })
       });
       const data = await response.json();
       if (data.success) {
-        alert("✅ 클라우드 제작 요청 성공! 몇 분 후 보관함에서 확인해 주세요.");
+        if (!requestId) {
+          alert("✅ 클라우드 제작 요청 성공! 몇 분 후 보관함에서 확인해 주세요.");
+        } else {
+          console.log(`🚀 Cloud render triggered for request: ${requestId}`);
+        }
       } else {
-        alert("❌ 클라우드 요청 실패: " + data.error);
+        throw new Error(data.error || "GitHub Dispatch Failed");
       }
     } catch (e: any) {
-      alert("⚠️ 오류 발생: " + e.message);
+      console.error("Cloud Render Error:", e);
+      if (!requestId) alert("⚠️ 오류 발생: " + e.message);
     } finally {
       setIsCloudRendering(false);
     }
   };
+
+  const handleCloudRender = () => triggerCloudRender();
 
   const handleFinalSave = async () => {
     if (activeProject) {
@@ -1030,39 +1089,44 @@ export default function App() {
       <main className="flex-1 w-full max-w-[1600px] mx-auto px-6 md:px-12 lg:px-24 py-10 md:py-16 relative">
         {view === 'dashboard' && (
           <div className="w-full">
-            {user.role === 'admin' ? (
-              <div className="flex flex-col items-center justify-center py-20 md:py-32 space-y-12 animate-in fade-in slide-in-from-bottom-8">
-                <div className="text-center space-y-4">
-                  <h2 className="text-5xl md:text-7xl font-black italic tracking-tighter text-gray-900 leading-none">Create Your<br />Masterpiece.</h2>
-                  <p className="text-gray-400 font-medium md:text-xl">새로운 추억의 틀, 템플릿을 지금 바로 설계해보세요.</p>
+            <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+              <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 md:mb-16 gap-6 w-full">
+                <div className="space-y-2">
+                  <h2 className="text-4xl md:text-5xl font-black italic tracking-tighter text-gray-900">{user.role === 'admin' ? 'Template Master.' : 'Archive.'}</h2>
+                  <p className="text-gray-400 font-medium">{user.role === 'admin' ? '템플릿 설정을 관리하고 컨텐츠를 구성하세요.' : '소중한 순간들을 기록할 템플릿을 선택하세요.'}</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setActiveTemplate({ id: crypto.randomUUID(), name: "새 템플릿", sceneCount: 0, scenes: [], created_at: new Date().toISOString() });
-                    setActiveProject(null);
-                    setPrevView(view);
-                    setView('editor');
-                  }}
-                  className="bg-[#ffb3a3] text-white px-14 py-8 rounded-[3rem] font-black text-sm uppercase shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-4"
-                >
-                  <div className="p-3 bg-white/20 rounded-full"><Icons.Plus /></div>
-                  템플릿 만들기 시작하기
-                </button>
+                {user.role === 'admin' && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm('JSON 파일들로부터 템플릿 정보를 동기화하시겠습니까?')) return;
+                      try {
+                        const res = await fetch('/api/templates/sync', { method: 'POST' });
+                        if (res.ok) {
+                          alert('동기화 완료!');
+                          getTemplates().then(setTemplates);
+                        } else {
+                          alert('동기화 실패');
+                        }
+                      } catch (e) {
+                        alert('오류 발생');
+                      }
+                    }}
+                    className="px-8 py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-xl"
+                  >
+                    템플릿 동기화 (JSON)
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-                <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 md:mb-16 gap-6 w-full">
-                  <div className="space-y-2">
-                    <h2 className="text-4xl md:text-5xl font-black italic tracking-tighter text-gray-900">Archive.</h2>
-                    <p className="text-gray-400 font-medium">소중한 순간들을 기록할 템플릿을 선택하세요.</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10 w-full">
-                  {templates.map(tmpl => (
-                    <div key={tmpl.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl transition-all group flex flex-col relative">
-                      <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10 w-full">
+                {templates.map(tmpl => (
+                  <div key={tmpl.id} className="bg-white rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-sm hover:shadow-2xl transition-all group flex flex-col relative">
+                    <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => {
+                      setPrevView(view);
+                      if (user.role === 'admin') {
+                        setActiveTemplate(tmpl);
+                        setActiveProject(null);
+                      } else {
                         const expiry = new Date(); expiry.setDate(expiry.getDate() + 14);
-                        setPrevView(view);
                         setActiveProject({
                           id: crypto.randomUUID(),
                           templateId: tmpl.id,
@@ -1084,25 +1148,26 @@ export default function App() {
                             drawings: []
                           }))
                         });
-                        setActiveTemplate(tmpl); setView('editor');
-                      }}>
-                        {tmpl.scenes[0] ? (
-                          <ScenePreview scene={tmpl.scenes[0]} isAdmin={true} className="scale-90 group-hover:scale-100 transition-transform duration-700" />
-                        ) : (
-                          <Icons.Plus />
-                        )}
-                      </div>
-                      <div className="p-6 md:p-8 flex justify-between items-center border-t border-gray-50 bg-white">
-                        <h3 className="text-lg md:text-xl font-black tracking-tight">{tmpl.name}</h3>
-                      </div>
+                        setActiveTemplate(tmpl);
+                      }
+                      setView('editor');
+                    }}>
+                      {tmpl.scenes[0] ? (
+                        <ScenePreview scene={tmpl.scenes[0]} isAdmin={true} className="scale-90 group-hover:scale-100 transition-transform duration-700" />
+                      ) : (
+                        <Icons.Plus />
+                      )}
                     </div>
-                  ))}
-                  {templates.length === 0 && (
-                    <div className="col-span-full py-20 text-center text-gray-300 font-black uppercase tracking-[0.4em] text-xs italic">준비된 템플릿이 없습니다</div>
-                  )}
-                </div>
+                    <div className="p-6 md:p-8 flex justify-between items-center border-t border-gray-50 bg-white">
+                      <h3 className="text-lg md:text-xl font-black tracking-tight">{tmpl.name}</h3>
+                    </div>
+                  </div>
+                ))}
+                {templates.length === 0 && (
+                  <div className="col-span-full py-20 text-center text-gray-300 font-black uppercase tracking-[0.4em] text-xs italic">준비된 템플릿이 없습니다</div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -1405,9 +1470,12 @@ export default function App() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10 w-full">
               {(activeProject ? activeProject.userScenes : activeTemplate?.scenes)?.map((item: AdminScene | UserScene, idx: number) => (
                 <div key={idx} onClick={() => setEditingSceneIdx(idx)} className="bg-white rounded-[2.5rem] overflow-hidden border border-gray-100 hover:shadow-2xl transition-all cursor-pointer group relative shadow-sm w-full">
-                  <div className="aspect-[4/3] bg-gray-50 relative flex items-center justify-center overflow-hidden border-b border-gray-50">
+                  <div
+                    className="relative bg-gray-50 flex items-center justify-center overflow-hidden border-b border-gray-50"
+                    style={{ aspectRatio: `${templateDimensions.width} / ${templateDimensions.height}` }}
+                  >
                     <ScenePreview
-                      scene={item}
+                      scene={{ ...item, width: templateDimensions.width, height: templateDimensions.height }}
                       adminConfig={isAdminMode ? undefined : activeTemplate?.scenes[idx]}
                       isAdmin={isAdminMode}
                       className="group-hover:scale-105 transition-transform duration-500"
@@ -1454,6 +1522,8 @@ export default function App() {
           adminScene={activeTemplate ? activeTemplate.scenes[editingSceneIdx] : {} as AdminScene}
           userScene={activeProject ? activeProject.userScenes[editingSceneIdx] : {} as UserScene}
           isAdminMode={isAdminMode}
+          width={templateDimensions.width}
+          height={templateDimensions.height}
           onClose={() => setEditingSceneIdx(null)}
           onSave={(updated) => {
             if (activeProject) {
@@ -1524,6 +1594,18 @@ export default function App() {
                     const project = userProjects.find(p => p.id === requestModal.projectId);
                     if (!project || !user) return;
 
+                    // 1. 네이버페이 결제 진행 (최종 요청일 경우에만)
+                    if (requestModal.type === 'final') {
+                      const paySuccess = await requestNaverPay({
+                        amount: 9900, // 기본 결제 금액
+                        orderName: `MOMCAST: ${project.projectName} 최종 영상`,
+                        successUrl: window.location.href,
+                        failUrl: window.location.href
+                      });
+                      if (!paySuccess) return;
+                    }
+
+                    // 2. 요청 저장
                     const requestId = await saveUserRequest({
                       project_id: project.id,
                       project_name: project.projectName,
@@ -1533,9 +1615,22 @@ export default function App() {
                       scenes: project.userScenes
                     });
 
-                    // 시안 요청인 경우 구글 드라이브 동기화 실행 (백그라운드)
+                    // 3. 관리자 알림 (백그라운드)
+                    sendAdminOrderNotification({
+                      requestId,
+                      projectName: project.projectName,
+                      userEmail: user.email || 'Unknown',
+                      type: requestModal.type!
+                    }).catch(err => console.error('❌ Admin Notification Failed:', err));
+
+                    // 시안 요청인 경우 자동 렌더링 및 구글 드라이브 동기화 실행
                     if (requestModal.type === 'draft') {
-                      console.log('📤 Triggering G-Drive Sync for request:', requestId);
+                      console.log('📤 Triggering Auto-Render & G-Drive Sync for request:', requestId);
+
+                      // 1. 클라우드 렌더링 트리거
+                      triggerCloudRender(requestId, phoneNumber, project.projectName);
+
+                      // 2. 구글 드라이브 동기화 (기존 로직 유지)
                       fetch('/api/gdrive/sync', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1549,9 +1644,7 @@ export default function App() {
                             email: user.email || ''
                           }
                         })
-                      }).then(res => res.json())
-                        .then(data => console.log('✅ G-Drive Sync Response:', data))
-                        .catch(err => console.error('❌ G-Drive Sync Failed:', err));
+                      }).catch(err => console.error('❌ G-Drive Sync Failed:', err));
                     }
 
                     alert('요청이 성공적으로 접수되었습니다!');
@@ -1629,8 +1722,8 @@ export default function App() {
                   onClick={handleCloudRender}
                   disabled={isCloudRendering}
                   className={`w-full py-6 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl transition-all border shrink-0 ${isCloudRendering
-                      ? 'bg-gray-800 text-gray-500 border-transparent animate-pulse cursor-not-allowed'
-                      : 'bg-white text-black border-white hover:bg-gray-100 active:scale-95'
+                    ? 'bg-gray-800 text-gray-500 border-transparent animate-pulse cursor-not-allowed'
+                    : 'bg-white text-black border-white hover:bg-gray-100 active:scale-95'
                     }`}
                 >
                   {isCloudRendering ? '전송 중...' : '클라우드 제작 (초고화질)'}

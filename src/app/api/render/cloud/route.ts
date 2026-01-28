@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { template, userImages, userTexts } = body;
+        const { template, userImages, userTexts, requestId, contactInfo, projectName } = body;
 
         const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
         const GITHUB_OWNER = process.env.GITHUB_REPO_OWNER;
@@ -27,6 +27,9 @@ export async function POST(req: NextRequest) {
                     template,
                     userImages,
                     userTexts,
+                    requestId,
+                    contactInfo,
+                    projectName,
                     timestamp: new Date().toISOString()
                 }
             })

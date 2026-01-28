@@ -55,6 +55,8 @@ export interface Template {
   id: string;
   name: string;
   sceneCount: number;
+  width?: number;
+  height?: number;
   scenes: AdminScene[];
   created_at: string;
 }
