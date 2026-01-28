@@ -17,95 +17,128 @@ async function render() {
 
     // 만약 template 데이터가 직접 오지 않고 URL만 왔을 경우 fetch 시도
     if (!finalTemplate && templateUrl) {
-        console.log(`🌐 Fetching template from: ${templateUrl}`);
+        console.log(`🌐 Fetching template from URL: ${templateUrl}`);
         try {
-            const res = await fetch(templateUrl);
-            if (!res.ok) throw new Error(`Failed to fetch template: ${res.statusText}`);
+            const res = await fetch(templateUrl, {
+                headers: { 'User-Agent': 'Momcast-Render-Engine' }
+            });
+            if (!res.ok) {
+                console.error(`❌ HTTP Error: ${res.status} ${res.statusText}`);
+                throw new Error(`Failed to fetch template: ${res.statusText}`);
+            }
             finalTemplate = await res.json();
-            console.log("✅ Template fetched successfully");
+            console.log("✅ Template fetched successfully (Size: " + JSON.stringify(finalTemplate).length + " bytes)");
         } catch (err) {
-            console.error("❌ Template fetch error:", err);
+            console.error("❌ Template fetch error:", err.message);
+            // 만약 localhost일 경우 경고 출력
+            if (templateUrl.includes('localhost')) {
+                console.error("⚠️ CRITICAL: GitHub Actions cannot access 'localhost'. Please set NEXT_PUBLIC_SITE_URL environment variable.");
+            }
             process.exit(1);
         }
     }
 
     if (!finalTemplate) {
-        console.error("No template data provided (neither template nor templateUrl).");
+        console.error("❌ ERROR: No template data provided (neither template nor templateUrl).");
         process.exit(1);
     }
 
-    const template = finalTemplate; // 기존 코드와의 호환성을 위해 할당
+    const template = finalTemplate;
 
     console.log("🚀 Starting Cloud Rendering...");
     if (requestId) {
         console.log(`📌 Processing Request ID: ${requestId}`);
         if (supabase) {
-            await supabase.from('requests').update({ status: 'processing' }).eq('id', requestId);
+            try {
+                await supabase.from('requests').update({
+                    render_status: 'processing',
+                    updated_at: new Date().toISOString()
+                }).eq('id', requestId);
+            } catch (dbErr) {
+                console.warn("⚠️ Database update warning (initial):", dbErr.message);
+            }
         }
     }
 
-    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-    const page = await browser.newPage();
-    await page.setViewport({ width: template.w, height: template.h });
-
-    const lottieCdn = 'https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js';
-    const htmlContent = `
-    <html>
-    <head><script src="${lottieCdn}"></script></head>
-    <body style="margin:0"><div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
-    <script>
-        const animation = lottie.loadAnimation({
-            container: document.getElementById('lottie'),
-            renderer: 'canvas',
-            loop: false, autoplay: false,
-            animationData: ${JSON.stringify(template)}
-        });
-        animation.addEventListener('DOMLoaded', () => {
-            const userImages = ${JSON.stringify(userImages)};
-            const userTexts = ${JSON.stringify(userTexts)};
-            animation.assets.forEach(asset => { if(userImages[asset.id]) { asset.p = userImages[asset.id]; asset.u = ''; } });
-            const searchLayers = (layers) => {
-                layers.forEach(layer => {
-                    if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) layer.t.d.k[0].s.t = userTexts[layer.nm];
-                    if (layer.layers) searchLayers(layer.layers);
-                });
-            };
-            searchLayers(animation.layers);
-            window.isLottieReady = true;
-        });
-    </script></body></html>`;
-
-    await page.setContent(htmlContent);
-    await page.waitForFunction('window.isLottieReady === true');
-
-    const framesDir = path.join(__dirname, 'frames');
-    if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir);
-
-    const totalFrames = template.op - template.ip;
-    let lastReportedProgress = -1;
-
-    for (let i = 0; i < totalFrames; i++) {
-        await page.evaluate((frame) => { window.animation.goToAndStop(frame, true); }, i);
-        await page.screenshot({ path: path.join(framesDir, `frame_${i.toString().padStart(5, '0')}.jpg`), type: 'jpeg', quality: 90 });
-
-        // 진행률 업데이트 (10% 단위로 DB 부하 최소화)
-        const currentProgress = Math.floor((i / totalFrames) * 100);
-        if (currentProgress >= lastReportedProgress + 10 && requestId && supabase) {
-            await supabase.from('requests').update({
-                render_progress: currentProgress,
-                updated_at: new Date().toISOString()
-            }).eq('id', requestId);
-            lastReportedProgress = currentProgress;
-            console.log(`[Progress Update] ${currentProgress}%`);
-        } else if (i % 30 === 0) {
-            console.log(`Progress: ${i}/${totalFrames} (${currentProgress}%)`);
-        }
-    }
-    await browser.close();
-
+    let browser;
     try {
+        console.log("🌐 Launching Browser...");
+        browser = await puppeteer.launch({
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ],
+            headless: 'new' // 최신 headless 모드 사용
+        });
+        console.log("✅ Browser launched successfully");
+
+        const page = await browser.newPage();
+        await page.setViewport({ width: template.w, height: template.h });
+
+        const lottieCdn = 'https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js';
+        const htmlContent = `
+        <html>
+        <head><script src="${lottieCdn}"></script></head>
+        <body style="margin:0; background:black;"><div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
+        <script>
+            const animation = lottie.loadAnimation({
+                container: document.getElementById('lottie'),
+                renderer: 'canvas',
+                loop: false, autoplay: false,
+                animationData: ${JSON.stringify(template)}
+            });
+            animation.addEventListener('DOMLoaded', () => {
+                const userImages = ${JSON.stringify(userImages || {})};
+                const userTexts = ${JSON.stringify(userTexts || {})};
+                animation.assets.forEach(asset => { if(userImages[asset.id]) { asset.p = userImages[asset.id]; asset.u = ''; } });
+                const searchLayers = (layers) => {
+                    layers.forEach(layer => {
+                        if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) layer.t.d.k[0].s.t = userTexts[layer.nm];
+                        if (layer.layers) searchLayers(layer.layers);
+                    });
+                };
+                searchLayers(animation.layers);
+                window.isLottieReady = true;
+            });
+        </script></body></html>`;
+
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 60000 });
+        await page.waitForFunction('window.isLottieReady === true', { timeout: 30000 });
+
+        const framesDir = path.join(__dirname, 'frames');
+        if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir);
+
+        const totalFrames = template.op - template.ip;
+        console.log(`📸 Rendering ${totalFrames} frames...`);
+        let lastReportedProgress = -1;
+
+        for (let i = 0; i < totalFrames; i++) {
+            await page.evaluate((frame) => { window.animation.goToAndStop(frame, true); }, i);
+            await page.screenshot({ path: path.join(framesDir, `frame_${i.toString().padStart(5, '0')}.jpg`), type: 'jpeg', quality: 90 });
+
+            const currentProgress = Math.floor((i / totalFrames) * 100);
+            if (currentProgress >= lastReportedProgress + 10 && requestId && supabase) {
+                await supabase.from('requests').update({
+                    render_progress: currentProgress,
+                    updated_at: new Date().toISOString()
+                }).eq('id', requestId);
+                lastReportedProgress = currentProgress;
+                console.log(`[Progress] ${currentProgress}%`);
+            } else if (i % 50 === 0) {
+                process.stdout.write('.'); // 점으로 진행 표시
+            }
+        }
+        console.log("\n✅ All frames rendered.");
+        await browser.close();
+
         const outputPath = path.join(process.cwd(), 'output.mp4');
-        execSync(`ffmpeg -framerate ${template.fr || 30} -i scripts/render/frames/frame_%05d.jpg -c:v libx264 -pix_fmt yuv420p -y "${outputPath}"`);
+        console.log("🎬 Encoding video with FFmpeg...");
+
+        // 프레임 경로가 올바른지 확인 (CI 환경 대응)
+        const framePattern = path.join(__dirname, 'frames', 'frame_%05d.jpg');
+        execSync(`ffmpeg -framerate ${template.fr || 30} -i "${framePattern}" -c:v libx264 -pix_fmt yuv420p -y "${outputPath}"`);
         console.log(`✅ Complete: ${outputPath}`);
 
         if (supabase && fs.existsSync(outputPath)) {
@@ -120,28 +153,30 @@ async function render() {
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage.from('renders').getPublicUrl(fileName);
-            console.log(`🎥 Video URL: ${publicUrl}`);
+            console.log(`🎥 Public Video URL: ${publicUrl}`);
 
             if (requestId) {
                 await supabase.from('requests').update({
                     status: 'completed',
-                    result_url: publicUrl
+                    render_status: 'completed',
+                    result_url: publicUrl,
+                    video_url: publicUrl,
+                    rendered_at: new Date().toISOString(),
+                    render_progress: 100
                 }).eq('id', requestId);
-                console.log(`✅ Supabase Status Updated for request ${requestId}`);
-
-                // Send Notification (Optional trigger)
-                if (contactInfo) {
-                    console.log(`[Notification] Completion alert would be sent to ${contactInfo}`);
-                    // In a real environment, you might hit a webhook or internal API
-                }
+                console.log(`✅ Supabase status updated to 'completed'`);
             }
         }
     } catch (err) {
-        console.error("Rendering Process Error:", err);
+        console.error("❌ Rendering Process Error:", err);
+        if (browser) await browser.close();
         if (supabase && requestId) {
-            await supabase.from('requests').update({ status: 'pending' }).eq('id', requestId);
+            await supabase.from('requests').update({
+                render_status: 'failed',
+                updated_at: new Date().toISOString()
+            }).eq('id', requestId);
         }
         process.exit(1);
     }
 }
-render().catch(err => { console.error(err); process.exit(1); });
+render().catch(err => { console.error("💥 Uncaught Exception:", err); process.exit(1); });
