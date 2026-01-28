@@ -34,6 +34,9 @@ export interface UserRequest {
     type: 'draft' | 'final'
     contact_info: string
     status: 'pending' | 'processing' | 'completed'
+    render_status?: 'pending' | 'processing' | 'completed' | 'failed'
+    video_url?: string
+    rendered_at?: string
     result_url?: string
     created_at?: string
 }

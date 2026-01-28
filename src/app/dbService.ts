@@ -94,6 +94,9 @@ export const getUserRequests = async (): Promise<UserRequest[]> => {
             user_id: string,
             type: 'draft' | 'final',
             status: 'pending' | 'processing' | 'completed',
+            render_status?: 'pending' | 'processing' | 'completed' | 'failed',
+            video_url?: string,
+            rendered_at?: string,
             contact_info: string,
             result_url?: string,
             created_at: string,
@@ -101,14 +104,17 @@ export const getUserRequests = async (): Promise<UserRequest[]> => {
         }) => ({
             id: req.id,
             projectId: req.project_id,
-            projectName: req.projects?.name || 'Unknown Project',
             userId: req.user_id,
-            userName: '',
             type: req.type,
             status: req.status,
+            render_status: req.render_status,
+            video_url: req.video_url,
+            rendered_at: req.rendered_at,
             contactInfo: req.contact_info,
             resultUrl: req.result_url,
             createdAt: req.created_at,
+            projectName: req.projects?.name || 'Unknown Project',
+            userName: '',
             userScenes: []
         }));
     } catch (error) {

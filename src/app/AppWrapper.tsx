@@ -1339,18 +1339,34 @@ export default function App() {
                             <div className="flex flex-col gap-2">
                               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">요청 상태</span>
-                                <span className={`text-[10px] font-black uppercase ${userRequests.find(r => r.projectId === item.id)?.status === 'completed' ? 'text-green-500' : 'text-[#ffb3a3]'}`}>
-                                  {userRequests.find(r => r.projectId === item.id)?.status === 'completed' ? '완료' : '처리 중'}
+                                <span className={`text-[10px] font-black uppercase ${(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed')
+                                    ? 'text-green-500' : 'text-[#ffb3a3]'
+                                  }`}>
+                                  {(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed') ? '완료' : '처리 중'}
                                 </span>
                               </div>
+
+                              {/* 1. 자동 렌더링 결과 (videoUrl) */}
+                              {userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' && userRequests.find(r => r.projectId === item.id)?.videoUrl && (
+                                <a
+                                  href={userRequests.find(r => r.projectId === item.id)?.videoUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="py-3.5 bg-[#03C75A] text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                  <Icons.ExternalLink /> 시안 확인하기 (자동)
+                                </a>
+                              )}
+
+                              {/* 2. 관리자 수동 업로드 결과 (resultUrl) */}
                               {userRequests.find(r => r.projectId === item.id)?.status === 'completed' && userRequests.find(r => r.projectId === item.id)?.resultUrl && (
                                 <a
                                   href={userRequests.find(r => r.projectId === item.id)?.resultUrl}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="py-3.5 bg-[#03C75A] text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 flex items-center justify-center gap-2"
+                                  className="py-3.5 bg-gray-900 text-white rounded-xl font-black text-[10px] uppercase tracking-wider text-center shadow-md active:scale-95 flex items-center justify-center gap-2"
                                 >
-                                  <Icons.ExternalLink /> 시안 확인하기
+                                  <Icons.ExternalLink /> 시안 확인하기 (수동)
                                 </a>
                               )}
                             </div>
@@ -1715,8 +1731,17 @@ export default function App() {
                     if (requestModal.type === 'draft') {
                       console.log('📤 Triggering Auto-Render & G-Drive Sync for request:', requestId);
 
-                      // 1. 클라우드 렌더링 트리거
-                      triggerCloudRender(requestId, phoneNumber, project.projectName);
+                      // 1. 렌더링 작업 등록
+                      fetch('/api/render/submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          requestId,
+                          projectId: project.id,
+                          scenes: project.userScenes,
+                          templateId: project.templateId
+                        })
+                      }).catch(err => console.error('❌ Render Submit Failed:', err));
 
                       // 2. 구글 드라이브 동기화 (기존 로직 유지)
                       fetch('/api/gdrive/sync', {

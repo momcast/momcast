@@ -90,6 +90,9 @@ export interface UserRequest {
   userName: string;
   type: 'draft' | 'final';
   status: 'pending' | 'processing' | 'completed';
+  renderStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  videoUrl?: string;
+  renderedAt?: string;
   contactInfo: string;
   resultUrl?: string;
   createdAt: string;
