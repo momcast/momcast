@@ -31,68 +31,59 @@ export async function POST(req: NextRequest) {
                 const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
                 const { w, h, nm, assets, layers: topLayers } = data;
 
-                // 1. 장면(사진 컴포지션) 분석 (사진01, 사진02 ... 또는 image_0...)
-                let scenesBase = (assets || []).filter((a: any) =>
-                    a.layers && (a.nm?.includes('사진') || a.nm?.toLowerCase().includes('image') || a.nm?.toLowerCase().includes('photo'))
-                );
-
-                // 만약 특정 키워드 compositions가 없다면, layers가 있는 모든 assets(compositions)를 후보로 검토
-                if (scenesBase.length === 0) {
-                    scenesBase = (assets || []).filter((a: any) => a.layers && (a.nm || a.id));
-                    console.log(`[Sync] No photo/image comps found. Found ${scenesBase.length} total compositions.`);
-                }
-
-                // 만약 위에서도 안 나오면 기존 방식(image_X 에셋)으로 폴백
-                if (scenesBase.length === 0) {
-                    scenesBase = (assets || []).filter((a: any) => a.id && (a.id.startsWith('image_') || a.p?.includes('img_')));
-                    console.log(`[Sync] Falling back to image assets: ${scenesBase.length} found.`);
-                }
-
-                // 이름 순으로 정렬
-                scenesBase.sort((a: any, b: any) => (a.nm || a.id || "").localeCompare(b.nm || b.id || "", undefined, { numeric: true, sensitivity: 'base' }));
-
-                const sceneCount = scenesBase.length || 1;
-
-                // 2. 텍스트 레이어 및 범위 분석 (텍스트12~13 등)
-                const textRangeMap: Record<number, { isFirst: boolean, range: string }> = {};
-
-                const scanLayers = (ls: any[]) => {
-                    ls.forEach(l => {
-                        if (l.nm && (l.nm.includes('텍스트') || l.nm.includes('text'))) {
-                            const rangeMatch = l.nm.match(/(\d+)[~-](\d+)/);
-                            if (rangeMatch) {
-                                const start = parseInt(rangeMatch[1]);
-                                const end = parseInt(rangeMatch[2]);
-                                for (let i = start; i <= end; i++) {
-                                    textRangeMap[i] = { isFirst: i === start, range: l.nm };
-                                }
-                            } else {
-                                const singleMatch = l.nm.match(/(\d+)/);
-                                if (singleMatch) {
-                                    const idx = parseInt(singleMatch[singleMatch.length - 1]); // 가장 마지막 숫자 사용 (텍스트last31 등 대응)
-                                    textRangeMap[idx] = { isFirst: true, range: l.nm };
-                                }
-                            }
-                        }
-                        if (l.layers) scanLayers(l.layers);
-                    });
+                // 헬퍼 함수: 이름에서 숫자 추출
+                const extractNumber = (name: string): number | null => {
+                    const match = name?.match(/\d+/);
+                    return match ? parseInt(match[0]) : null;
                 };
 
-                scanLayers(topLayers || []);
-                (assets || []).forEach((a: any) => { if (a.layers) scanLayers(a.layers); });
+                // 1. 사진 컴포지션 분석
+                const photoComps = (assets || []).filter((a: any) =>
+                    a.layers && a.nm && a.nm.includes('사진')
+                );
 
-                // 3. 장면 데이터 생성
-                const scenes = scenesBase.map((item: any, idx: number) => {
-                    // 이름에서 번호 추출 (없으면 인덱스 + 1)
-                    const numMatch = item.nm?.match(/\d+/);
-                    const sceneNum = numMatch ? parseInt(numMatch[0]) : idx + 1;
-                    const textInfo = textRangeMap[sceneNum];
+                console.log(`[Sync] Found ${photoComps.length} photo compositions.`);
+
+                // 2. 텍스트 컴포지션 분석
+                const textComps = (assets || []).filter((a: any) =>
+                    a.layers && a.nm && a.nm.includes('텍스트')
+                );
+
+                console.log(`[Sync] Found ${textComps.length} text compositions.`);
+
+                // 3. 사진과 텍스트의 모든 번호 추출
+                const photoNumbers = photoComps.map((c: any) => extractNumber(c.nm)).filter((n: any) => n !== null) as number[];
+                const textNumbers = textComps.map((c: any) => extractNumber(c.nm)).filter((n: any) => n !== null) as number[];
+
+                // 4. 번호 합집합 구하기 (중복 제거 및 정렬)
+                const allNumbers = Array.from(new Set([...photoNumbers, ...textNumbers])).sort((a, b) => a - b);
+
+                console.log(`[Sync] Scene numbers detected:`, allNumbers);
+
+                if (allNumbers.length === 0) {
+                    console.log(`[Sync] No numbered scenes found. Skipping ${file}.`);
+                    results.push({ file, status: 'skipped', message: 'No numbered photo or text compositions found' });
+                    continue;
+                }
+
+                // 5. 각 번호에 대해 씬 생성
+                const scenes = allNumbers.map((num, idx) => {
+                    // 해당 번호의 사진/텍스트 컴포지션 찾기
+                    const photoComp = photoComps.find((c: any) => extractNumber(c.nm) === num);
+                    const textComp = textComps.find((c: any) => extractNumber(c.nm) === num);
+
+                    // 사진이나 텍스트 중 하나라도 있으면 해당 정보 사용
+                    const sceneWidth = photoComp?.w || textComp?.w || w || 1920;
+                    const sceneHeight = photoComp?.h || textComp?.h || h || 1080;
 
                     return {
-                        id: item.id || `scene_${idx}`,
-                        name: item.nm || `장면 ${idx + 1}`,
-                        width: item.w || w,
-                        height: item.h || h,
+                        id: photoComp?.id || textComp?.id || `scene_${num}`,
+                        name: `장면 ${num}`,
+                        sceneNumber: num,
+                        hasPhoto: !!photoComp,
+                        hasText: !!textComp,
+                        width: sceneWidth,
+                        height: sceneHeight,
                         rotation: 0,
                         zoom: 1,
                         position: { x: 50, y: 50 },
@@ -101,10 +92,10 @@ export async function POST(req: NextRequest) {
                         cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
                         stickers: [],
                         drawings: [],
-                        aeLayerName: textInfo?.range || `text_${sceneNum}`,
-                        defaultContent: textInfo?.isFirst ? `${sceneNum}번 문구 입력` : "",
+                        aeLayerName: textComp?.nm || null,
+                        defaultContent: textComp ? `${num}번 문구 입력` : "",
                         allowUserUpload: true,
-                        allowUserText: textInfo ? textInfo.isFirst : false,
+                        allowUserText: !!textComp,
                         allowUserDecorate: true
                     };
                 });
@@ -112,7 +103,7 @@ export async function POST(req: NextRequest) {
                 const templateData = {
                     id: templateId,
                     name: nm || templateId,
-                    scene_count: sceneCount,
+                    scene_count: scenes.length,
                     width: w,
                     height: h,
                     scenes: scenes,
@@ -130,7 +121,7 @@ export async function POST(req: NextRequest) {
                     results.push({ file, status: 'error', message: upsertError.message });
                 } else {
                     console.log(`[Sync] Successfully synced ${file}`);
-                    results.push({ file, status: 'success', sceneCount });
+                    results.push({ file, status: 'success', sceneCount: scenes.length });
                 }
 
             } catch (e: any) {
