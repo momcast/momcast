@@ -1709,12 +1709,18 @@ export default function App() {
                             }
                           });
 
-                          // 2. 렌더링 작업 등록 (ID와 메타데이터만 포함하여 64KB 한도 회피)
-                          // 씬 정보 생성
-                          const scenesData = project.userScenes.map(s => ({
+                          // 씬 정보 생성 (Fallback: 템플릿 씬 사용)
+                          let scenesData = project.userScenes.map(s => ({
                             id: s.id,
                             aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName
                           }));
+
+                          // 씬이 없으면 템플릿의 씬을 사용
+                          if (!scenesData || scenesData.length === 0) {
+                            console.warn('⚠️ No user scenes found, using template scenes');
+                            scenesData = activeTemplate?.scenes.map(s => ({ id: s.id, aeLayerName: s.aeLayerName })) || [];
+                          }
+
                           console.log('🎬 Scenes to render:', scenesData);
 
                           const submitRes = await fetch('/api/render/submit', {
@@ -1723,7 +1729,7 @@ export default function App() {
                             body: JSON.stringify({
                               requestId,
                               projectId: project.id,
-                              templateId: project.templateId, // JSON 대신 ID만 전달
+                              templateId: project.templateId,
                               projectName: project.projectName,
                               contactInfo: phoneNumber,
                               userImages,
