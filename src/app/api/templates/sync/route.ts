@@ -37,15 +37,33 @@ export async function POST(req: NextRequest) {
                     return match ? parseInt(match[0]) : null;
                 };
 
+                // 0. 'scene' 폴더 찾기 (선택적)
+                const sceneFolder = (assets || []).find((a: any) =>
+                    a.nm && a.nm.toLowerCase() === 'scene'
+                );
+
+                let targetAssets = assets || [];
+
+                if (sceneFolder) {
+                    // 'scene' 폴더가 있으면 해당 폴더 내부의 컴포지션만 사용
+                    const sceneFolderPath = sceneFolder.u;
+                    targetAssets = (assets || []).filter((a: any) =>
+                        a.u === sceneFolderPath && a.layers
+                    );
+                    console.log(`[Sync] Found 'scene' folder. Using ${targetAssets.length} compositions inside it.`);
+                } else {
+                    console.log(`[Sync] No 'scene' folder found. Scanning all compositions.`);
+                }
+
                 // 1. 사진 컴포지션 분석
-                const photoComps = (assets || []).filter((a: any) =>
+                const photoComps = targetAssets.filter((a: any) =>
                     a.layers && a.nm && a.nm.includes('사진')
                 );
 
                 console.log(`[Sync] Found ${photoComps.length} photo compositions.`);
 
                 // 2. 텍스트 컴포지션 분석
-                const textComps = (assets || []).filter((a: any) =>
+                const textComps = targetAssets.filter((a: any) =>
                     a.layers && a.nm && a.nm.includes('텍스트')
                 );
 
