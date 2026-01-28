@@ -1340,9 +1340,15 @@ export default function App() {
                               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
                                 <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">요청 상태</span>
                                 <span className={`text-[10px] font-black uppercase ${(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed')
-                                  ? 'text-green-500' : 'text-[#ffb3a3]'
+                                  ? 'text-green-500'
+                                  : (userRequests.find(r => r.projectId === item.id)?.renderStatus === 'processing' ? 'text-blue-500' : 'text-[#ffb3a3]')
                                   }`}>
-                                  {(userRequests.find(r => r.projectId === item.id)?.renderStatus === 'completed' || userRequests.find(r => r.projectId === item.id)?.status === 'completed') ? '완료' : '처리 중'}
+                                  {(() => {
+                                    const req = userRequests.find(r => r.projectId === item.id);
+                                    if (req?.renderStatus === 'completed' || req?.status === 'completed') return '완료';
+                                    if (req?.renderStatus === 'processing') return '일하는 중...';
+                                    return '대기 중';
+                                  })()}
                                 </span>
                               </div>
 
@@ -1457,8 +1463,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <span className={`px-6 py-3 rounded-full font-black text-[10px] uppercase ${req.renderStatus === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                      {req.renderStatus === 'completed' ? '처리 완료' : (req.renderStatus === 'processing' ? '일하는 중...' : '대기 중')}
+                    <span className={`px-6 py-3 rounded-full font-black text-[10px] uppercase ${req.renderStatus === 'completed' ? 'bg-green-100 text-green-600' : (req.renderStatus === 'processing' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400')
+                      }`}>
+                      {req.renderStatus === 'completed' ? '완료' : (req.renderStatus === 'processing' ? '일하는 중...' : '대기 중')}
                     </span>
                     {req.videoUrl && (
                       <a href={req.videoUrl} target="_blank" rel="noreferrer" className="p-3 bg-white border border-gray-100 rounded-full text-gray-400 hover:text-gray-900 shadow-sm"><Icons.ExternalLink /></a>
