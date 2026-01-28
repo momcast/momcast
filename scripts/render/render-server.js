@@ -190,7 +190,26 @@ async function render() {
 
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded', timeout: 120000 });
         console.log("⏳ Waiting for Lottie animation to initialize...");
-        await page.waitForFunction('window.isLottieReady === true', { timeout: 180000 });
+
+        // waitForFunction 대신 폴링 방식 사용 (더 안정적)
+        let ready = false;
+        const maxAttempts = 360; // 3분 (0.5초 간격)
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                ready = await page.evaluate(() => window.isLottieReady === true);
+                if (ready) {
+                    console.log(`✅ Lottie ready after ${i * 0.5} seconds`);
+                    break;
+                }
+            } catch (err) {
+                // 계속 시도
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        if (!ready) {
+            throw new Error(' Lottie failed to initialize after 3 minutes');
+        }
 
         const framesDir = path.join(__dirname, 'frames');
         if (!fs.existsSync(framesDir)) fs.mkdirSync(framesDir);
