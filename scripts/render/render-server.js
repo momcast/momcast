@@ -136,13 +136,25 @@ async function render() {
 
             // 씬 템플릿 추출 (작은 JSON)
             const sceneTemplate = extractSceneTemplate(fullTemplate, sceneComp);
+
+            // 전달받은 씬 정보(API)에 치수가 있으면 사용 (Lottie에 누락된 경우 대비)
+            const inputScene = scenes.find(s => s.id === sceneComp.id);
+            if (inputScene && inputScene.width && inputScene.height) {
+                console.log(`  🔧 Overriding dimensions from input: ${inputScene.width}x${inputScene.height}`);
+                sceneTemplate.w = inputScene.width;
+                sceneTemplate.h = inputScene.height;
+            }
+
             const sceneJson = JSON.stringify(sceneTemplate);
             console.log(`  📦 Scene template size: ${sceneJson.length} bytes (${(sceneJson.length / 1024).toFixed(1)}KB)`);
             console.log(`  📐 Scene dimensions: ${sceneTemplate.w}x${sceneTemplate.h} (${sceneTemplate.w > sceneTemplate.h ? 'landscape' : 'portrait'})`);
 
             // 새 페이지
             const page = await browser.newPage();
-            await page.setViewport({ width: sceneTemplate.w, height: sceneTemplate.h });
+            // 치수가 없으면 기본값 사용 (방어 코드)
+            const viewWidth = sceneTemplate.w || 1920;
+            const viewHeight = sceneTemplate.h || 1080;
+            await page.setViewport({ width: viewWidth, height: viewHeight });
 
             // HTML 생성
             const htmlContent = `<!DOCTYPE html>

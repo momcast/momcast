@@ -1709,16 +1709,34 @@ export default function App() {
                             }
                           });
 
-                          // 씬 정보 생성 (Fallback: 템플릿 씬 사용)
-                          let scenesData = project.userScenes.map(s => ({
-                            id: s.id,
-                            aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName
-                          }));
+                          // 씬 정보 생성 (Fallback: 템플릿 씬 사용, 최대 20개)
+                          const getSceneDimensions = (s: any) => {
+                            const templateScene = activeTemplate?.scenes.find(as => as.id === s.id);
+                            return {
+                              width: (templateScene as any)?.width || templateDimensions.width,
+                              height: (templateScene as any)?.height || templateDimensions.height
+                            };
+                          };
+
+                          let scenesData = project.userScenes.map(s => {
+                            const dims = getSceneDimensions(s);
+                            return {
+                              id: s.id,
+                              aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName,
+                              width: dims.width,
+                              height: dims.height
+                            };
+                          });
 
                           // 씬이 없으면 템플릿의 씬을 사용 (최대 20개)
                           if (!scenesData || scenesData.length === 0) {
                             console.warn('⚠️ No user scenes found, using template scenes (max 20)');
-                            scenesData = (activeTemplate?.scenes || []).slice(0, 20).map(s => ({ id: s.id, aeLayerName: s.aeLayerName }));
+                            scenesData = (activeTemplate?.scenes || []).slice(0, 20).map(s => ({
+                              id: s.id,
+                              aeLayerName: s.aeLayerName,
+                              width: (s as any).width || templateDimensions.width,
+                              height: (s as any).height || templateDimensions.height
+                            }));
                           }
 
                           console.log('🎬 Scenes to render:', scenesData);
