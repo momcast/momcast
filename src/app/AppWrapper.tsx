@@ -1715,10 +1715,10 @@ export default function App() {
                             aeLayerName: activeTemplate?.scenes.find(as => as.id === s.id)?.aeLayerName
                           }));
 
-                          // 씬이 없으면 템플릿의 씬을 사용
+                          // 씬이 없으면 템플릿의 씬을 사용 (최대 20개)
                           if (!scenesData || scenesData.length === 0) {
-                            console.warn('⚠️ No user scenes found, using template scenes');
-                            scenesData = activeTemplate?.scenes.map(s => ({ id: s.id, aeLayerName: s.aeLayerName })) || [];
+                            console.warn('⚠️ No user scenes found, using template scenes (max 20)');
+                            scenesData = (activeTemplate?.scenes || []).slice(0, 20).map(s => ({ id: s.id, aeLayerName: s.aeLayerName }));
                           }
 
                           console.log('🎬 Scenes to render:', scenesData);
