@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/app/supabaseClient';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { requestId, projectId, template, userImages, userTexts, projectName, contactInfo } = body;
 
-        console.log('[Render Submit] Starting GitHub Action render job:', { requestId, projectId, projectName });
+        console.log(`[Render Submit] 🚀 Starting GitHub Action render job:`, { requestId, projectId, projectName });
+
+        if (!supabaseAdmin) {
+            console.error("❌ Database configuration missing (supabaseAdmin)");
+            return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
+        }
 
         // GitHub 설정 가져오기
         const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -44,14 +49,13 @@ export async function POST(req: Request) {
         if (!ghRes.ok) {
             const errText = await ghRes.text();
             console.error(`❌ GitHub Dispatch Failed [${ghRes.status}]:`, errText);
-            // 트리거 실패해도 DB 상태는 업데이트하지 않고 에러 반환
             return NextResponse.json({ error: `GitHub API error (${ghRes.status})`, details: errText }, { status: ghRes.status });
         }
 
-        console.log('[Render Submit] GitHub Action triggered successfully');
+        console.log('[Render Submit] ✅ GitHub Action triggered successfully');
 
-        // 2. Supabase에서 요청 상태 업데이트
-        const { error: dbError } = await supabase
+        // 2. Supabase에서 요청 상태 업데이트 (Admin 권한 사용)
+        const { error: dbError } = await supabaseAdmin
             .from('requests')
             .update({
                 render_status: 'processing',
@@ -60,16 +64,18 @@ export async function POST(req: Request) {
             .eq('id', requestId);
 
         if (dbError) {
-            console.error('[Render Submit] Failed to update DB status:', dbError);
+            console.error('[Render Submit] ❌ Failed to update DB status:', dbError);
             return NextResponse.json({ error: dbError.message }, { status: 500 });
         }
+
+        console.log(`[Render Submit] ✨ Status updated to 'processing' for request: ${requestId}`);
 
         return NextResponse.json({
             success: true,
             message: 'Render job submitted to GitHub Actions successfully'
         });
     } catch (error: any) {
-        console.error('[Render Submit] Error:', error);
+        console.error('[Render Submit] 💥 Fatal Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

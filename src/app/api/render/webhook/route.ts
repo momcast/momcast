@@ -1,50 +1,46 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/app/supabaseClient';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function POST(req: Request) {
     try {
-        const { requestId, videoUrl, status, error: renderError } = await req.json();
+        const body = await req.json();
+        const { requestId, status, videoUrl } = body;
 
-        console.log('[Render Webhook] Received callback:', { requestId, status, videoUrl });
+        console.log(`[Render Webhook] 📥 Received callback for request: ${requestId}, status: ${status}`);
 
-        // 렌더링 상태 업데이트
-        const updateData: {
-            render_status: string;
-            video_url?: string;
-            rendered_at?: string;
-            updated_at: string;
-        } = {
-            render_status: status,
+        if (!requestId || !status) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
+        if (!supabaseAdmin) {
+            return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
+        }
+
+        const updateData: any = {
+            render_status: status, // 'completed', 'failed', etc.
             updated_at: new Date().toISOString()
         };
 
-        if (status === 'completed' && videoUrl) {
+        if (videoUrl) {
             updateData.video_url = videoUrl;
             updateData.rendered_at = new Date().toISOString();
         }
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
             .from('requests')
             .update(updateData)
             .eq('id', requestId);
 
         if (error) {
-            console.error('[Render Webhook] Failed to update status:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('[Render Webhook] ❌ DB Update Error:', error);
+            return NextResponse.json({ error: error.message }, { status: 400 });
         }
 
-        console.log('[Render Webhook] Status updated successfully:', requestId, status);
-
-        // TODO: 사용자에게 알림 전송 (렌더링 완료 시)
-        if (status === 'completed') {
-            console.log('[Render Webhook] Render completed, notification should be sent');
-            // 여기에 알림 로직 추가 가능
-        }
+        console.log(`[Render Webhook] ✅ Success: Request ${requestId} updated to ${status}`);
 
         return NextResponse.json({ success: true });
-    } catch (error: unknown) {
-        const err = error as Error;
-        console.error('[Render Webhook] Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+    } catch (error: any) {
+        console.error('[Render Webhook] 💥 Fatal Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

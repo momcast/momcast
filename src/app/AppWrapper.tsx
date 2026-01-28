@@ -1700,7 +1700,7 @@ export default function App() {
                           });
 
                           // 2. 렌더링 작업 등록 (전체 데이터 포함)
-                          await fetch('/api/render/submit', {
+                          const submitRes = await fetch('/api/render/submit', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1713,8 +1713,21 @@ export default function App() {
                               userTexts
                             })
                           });
-                        } catch (err) {
-                          console.error('❌ Render Submit Failed:', err);
+
+                          if (!submitRes.ok) {
+                            const errorData = await submitRes.json();
+                            console.error('❌ Render Submit Failed:', errorData);
+                            alert(`렌더링 엔진 전송에 실패했습니다: ${errorData.error || '알 수 없는 오류'}`);
+                          } else {
+                            console.log('✨ Render Job Submitted Successfully');
+                            // 요청 성공 시 리스트 갱신 유도
+                            setTimeout(() => {
+                              getUserRequests().then(setUserRequests);
+                            }, 500);
+                          }
+                        } catch (err: any) {
+                          console.error('❌ Render Submit Fatal Error:', err);
+                          alert(`렌더링 요청 중 오류가 발생했습니다: ${err.message}`);
                         }
                       };
 
