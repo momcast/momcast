@@ -76,6 +76,21 @@ async function render() {
         console.log("✅ Browser launched successfully");
 
         const page = await browser.newPage();
+
+        // 브라우저 콘솔 로그 캡처
+        page.on('console', msg => {
+            const type = msg.type();
+            const text = msg.text();
+            if (type === 'error') console.error(`🔴 Browser Error: ${text}`);
+            else if (type === 'warning') console.warn(`⚠️  Browser Warning: ${text}`);
+            else console.log(`🌐 Browser Log: ${text}`);
+        });
+
+        // 페이지 에러 캡처
+        page.on('pageerror', error => {
+            console.error(`💥 Page Error: ${error.message}`);
+        });
+
         await page.setViewport({ width: template.w, height: template.h });
 
         // 대용량 템플릿을 임시 파일로 저장 (HTML 인라인 파싱 문제 해결)
@@ -103,6 +118,8 @@ async function render() {
         <head><script src="${lottieCdn}"></script></head>
         <body style="margin:0; background:black;"><div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
         <script>
+            console.log('Script started, lottie available:', typeof lottie !== 'undefined');
+            
             // 파일 경로로 로드 (인라인 JSON 대신)
             const animation = lottie.loadAnimation({
                 container: document.getElementById('lottie'),
@@ -110,23 +127,51 @@ async function render() {
                 loop: false, autoplay: false,
                 path: '/temp_template.json'
             });
-            animation.addEventListener('DOMLoaded', () => {
-                console.log('Lottie DOMLoaded event fired');
-                const userImages = ${JSON.stringify(userImages || {})};
-                const userTexts = ${JSON.stringify(userTexts || {})};
-                animation.assets.forEach(asset => { if(userImages[asset.id]) { asset.p = userImages[asset.id]; asset.u = ''; } });
-                const searchLayers = (layers) => {
-                    layers.forEach(layer => {
-                        if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) layer.t.d.k[0].s.t = userTexts[layer.nm];
-                        if (layer.layers) searchLayers(layer.layers);
-                    });
-                };
-                searchLayers(animation.layers);
-                window.isLottieReady = true;
+            
+            console.log('loadAnimation called');
+            
+            animation.addEventListener('config_ready', () => {
+                console.log('Lottie config_ready event fired');
             });
+            
             animation.addEventListener('data_ready', () => {
                 console.log('Lottie data_ready event fired');
             });
+            
+            animation.addEventListener('DOMLoaded', () => {
+                console.log('Lottie DOMLoaded event fired');
+                try {
+                    const userImages = ${JSON.stringify(userImages || {})};
+                    const userTexts = ${JSON.stringify(userTexts || {})};
+                    animation.assets.forEach(asset => { if(userImages[asset.id]) { asset.p = userImages[asset.id]; asset.u = ''; } });
+                    const searchLayers = (layers) => {
+                        layers.forEach(layer => {
+                            if (layer.t?.d?.k?.[0]?.s && userTexts[layer.nm]) layer.t.d.k[0].s.t = userTexts[layer.nm];
+                            if (layer.layers) searchLayers(layer.layers);
+                        });
+                    };
+                    searchLayers(animation.layers);
+                    window.isLottieReady = true;
+                    console.log('isLottieReady set to true');
+                } catch (err) {
+                    console.error('Error in DOMLoaded handler:', err.message);
+                }
+            });
+            
+            animation.addEventListener('data_failed', () => {
+                console.error('Lottie data_failed event fired');
+            });
+            
+            animation.addEventListener('error', (err) => {
+                console.error('Lottie error event:', err);
+            });
+            
+            // 타임아웃 경고
+            setTimeout(() => {
+                if (!window.isLottieReady) {
+                    console.warn('Lottie still not ready after 30 seconds');
+                }
+            }, 30000);
         </script></body></html>`;
 
         await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 90000 });
