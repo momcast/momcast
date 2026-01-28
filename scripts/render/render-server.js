@@ -3,6 +3,7 @@ const path = require('path');
 const puppeteer = require('puppeteer');
 const { execSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch');
 
 const projectData = JSON.parse(process.env.PROJECT_DATA || '{}');
 const { template, templateUrl, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
