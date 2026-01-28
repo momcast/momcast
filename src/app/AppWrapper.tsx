@@ -1673,14 +1673,9 @@ export default function App() {
                     if (requestModal.type === 'draft') {
                       console.log('📤 Triggering Auto-Render & G-Drive Sync for request:', requestId);
 
-                      // 1. 데이터 가공 (기존 triggerCloudRender 로직 통합)
+                      // 1. 데이터 가공 (기본 정보 매핑)
                       const prepareAndSubmit = async () => {
                         try {
-                          // 템플릿 JSON 로드
-                          const tRes = await fetch(`/templates/${project.templateId}.json`);
-                          if (!tRes.ok) throw new Error("템플릿 파일을 찾을 수 없습니다.");
-                          const templateJson = await tRes.json();
-
                           const userImages: Record<string, string> = {};
                           const userTexts: Record<string, string> = {};
 
@@ -1699,16 +1694,16 @@ export default function App() {
                             }
                           });
 
-                          // 2. 렌더링 작업 등록 (전체 데이터 포함)
+                          // 2. 렌더링 작업 등록 (ID와 메타데이터만 포함하여 64KB 한도 회피)
                           const submitRes = await fetch('/api/render/submit', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               requestId,
                               projectId: project.id,
+                              templateId: project.templateId, // JSON 대신 ID만 전달
                               projectName: project.projectName,
                               contactInfo: phoneNumber,
-                              template: templateJson,
                               userImages,
                               userTexts
                             })

@@ -34,7 +34,7 @@ export async function POST(req: Request) {
             body: JSON.stringify({
                 event_type: 'render_video',
                 client_payload: {
-                    template,
+                    templateUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/templates/${body.templateId}.json`,
                     userImages,
                     userTexts,
                     requestId,

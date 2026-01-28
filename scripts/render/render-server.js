@@ -5,12 +5,7 @@ const { execSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 
 const projectData = JSON.parse(process.env.PROJECT_DATA || '{}');
-const { template, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
-
-if (!template) {
-    console.error("No template data provided.");
-    process.exit(1);
-}
+const { template, templateUrl, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
 
 // Supabase Configuration
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -18,6 +13,29 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 async function render() {
+    let finalTemplate = template;
+
+    // 만약 template 데이터가 직접 오지 않고 URL만 왔을 경우 fetch 시도
+    if (!finalTemplate && templateUrl) {
+        console.log(`🌐 Fetching template from: ${templateUrl}`);
+        try {
+            const res = await fetch(templateUrl);
+            if (!res.ok) throw new Error(`Failed to fetch template: ${res.statusText}`);
+            finalTemplate = await res.json();
+            console.log("✅ Template fetched successfully");
+        } catch (err) {
+            console.error("❌ Template fetch error:", err);
+            process.exit(1);
+        }
+    }
+
+    if (!finalTemplate) {
+        console.error("No template data provided (neither template nor templateUrl).");
+        process.exit(1);
+    }
+
+    const template = finalTemplate; // 기존 코드와의 호환성을 위해 할당
+
     console.log("🚀 Starting Cloud Rendering...");
     if (requestId) {
         console.log(`📌 Processing Request ID: ${requestId}`);
