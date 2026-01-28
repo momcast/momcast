@@ -138,6 +138,7 @@ async function render() {
             const sceneTemplate = extractSceneTemplate(fullTemplate, sceneComp);
             const sceneJson = JSON.stringify(sceneTemplate);
             console.log(`  📦 Scene template size: ${sceneJson.length} bytes (${(sceneJson.length / 1024).toFixed(1)}KB)`);
+            console.log(`  📐 Scene dimensions: ${sceneTemplate.w}x${sceneTemplate.h} (${sceneTemplate.w > sceneTemplate.h ? 'landscape' : 'portrait'})`);
 
             // 새 페이지
             const page = await browser.newPage();
