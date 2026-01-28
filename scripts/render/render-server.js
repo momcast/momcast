@@ -6,7 +6,7 @@ const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
 const projectData = JSON.parse(process.env.PROJECT_DATA || '{}');
-const { template, templateUrl, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
+const { template: initialTemplate, templateUrl, userImages, userTexts, requestId, contactInfo, projectName } = projectData;
 
 // Supabase Configuration
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -14,7 +14,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 async function render() {
-    let finalTemplate = template;
+    let finalTemplate = initialTemplate;
 
     // 만약 template 데이터가 직접 오지 않고 URL만 왔을 경우 fetch 시도
     if (!finalTemplate && templateUrl) {
