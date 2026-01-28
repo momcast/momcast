@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
         // 2. Supabase에서 요청 상태 업데이트
         const { error: dbError } = await supabase
-            .from('user_requests')
+            .from('requests')
             .update({
                 render_status: 'processing',
                 updated_at: new Date().toISOString()
