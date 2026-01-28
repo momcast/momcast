@@ -28,38 +28,73 @@ export async function POST(req: NextRequest) {
 
             try {
                 const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                const { w, h, nm } = data;
+                const { w, h, nm, assets, layers: topLayers } = data;
 
-                // Check if template exists
-                const { data: existing } = await supabase
-                    .from('templates')
-                    .select('id')
-                    .eq('id', templateId)
-                    .single();
+                // 1. 이미지 에셋 분석 (image_0, image_1 ...)
+                const imageAssets = (assets || []).filter((a: any) => a.id && a.id.startsWith('image_'));
+                const imageIndices = imageAssets.map((a: any) => parseInt(a.id.split('_')[1])).filter((n: number) => !isNaN(n));
+                const maxImageIdx = imageIndices.length > 0 ? Math.max(...imageIndices) : 0;
+                const sceneCount = maxImageIdx + 1;
 
-                const templateData: any = {
-                    id: templateId,
-                    name: nm || templateId,
-                    scene_count: 1,
+                // 2. 텍스트 레이어 및 범위 분석 (텍스트12~13 등)
+                const textRangeMap: Record<number, { isFirst: boolean, range: string }> = {};
+
+                const scanLayers = (ls: any[]) => {
+                    ls.forEach(l => {
+                        if (l.nm && (l.nm.includes('텍스트') || l.nm.includes('text'))) {
+                            const rangeMatch = l.nm.match(/(\d+)[~-](\d+)/);
+                            if (rangeMatch) {
+                                const start = parseInt(rangeMatch[1]);
+                                const end = parseInt(rangeMatch[2]);
+                                for (let i = start; i <= end; i++) {
+                                    textRangeMap[i] = { isFirst: i === start, range: l.nm };
+                                }
+                            } else {
+                                const singleMatch = l.nm.match(/(\d+)/);
+                                if (singleMatch) {
+                                    const idx = parseInt(singleMatch[1]);
+                                    textRangeMap[idx] = { isFirst: true, range: l.nm };
+                                }
+                            }
+                        }
+                        if (l.layers) scanLayers(l.layers);
+                    });
                 };
 
-                // Only set default scenes if it's a new template
-                if (!existing) {
-                    templateData.scenes = [
-                        {
-                            id: 'scene_1',
-                            rotation: 0,
-                            zoom: 1,
-                            position: { x: 50, y: 50 },
-                            backgroundMode: 'transparent',
-                            backgroundColor: '#ffffff',
-                            cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
-                            stickers: [],
-                            drawings: [],
-                            defaultContent: "새로운 장면"
-                        }
-                    ];
+                scanLayers(topLayers || []);
+                (assets || []).forEach((a: any) => { if (a.layers) scanLayers(a.layers); });
+
+                // 3. 장면 데이터 생성
+                const scenes = [];
+                for (let i = 0; i <= maxImageIdx; i++) {
+                    const textInfo = textRangeMap[i];
+                    scenes.push({
+                        id: `scene_${i}`,
+                        rotation: 0,
+                        zoom: 1,
+                        position: { x: 50, y: 50 },
+                        backgroundMode: 'transparent',
+                        backgroundColor: '#ffffff',
+                        cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
+                        stickers: [],
+                        drawings: [],
+                        aeLayerName: textInfo?.range || `text_${i}`,
+                        defaultContent: textInfo?.isFirst ? `${i}번 문구 입력` : "",
+                        allowUserUpload: true,
+                        allowUserText: textInfo ? textInfo.isFirst : false, // 이어지는 번호의 첫 번째만 텍스트 허용
+                        allowUserDecorate: true
+                    });
                 }
+
+                const templateData = {
+                    id: templateId,
+                    name: nm || templateId,
+                    scene_count: sceneCount,
+                    width: w,
+                    height: h,
+                    scenes: scenes,
+                    updated_at: new Date().toISOString()
+                };
 
                 const { error: upsertError } = await supabase
                     .from('templates')
@@ -68,7 +103,7 @@ export async function POST(req: NextRequest) {
                 if (upsertError) {
                     results.push({ file, status: 'error', message: upsertError.message });
                 } else {
-                    results.push({ file, status: 'success' });
+                    results.push({ file, status: 'success', sceneCount });
                 }
 
             } catch (e: any) {

@@ -902,7 +902,6 @@ export default function App() {
         setLottieTemplate(template);
       }
 
-      // 2. Map project data to assets
       const userImages: Record<string, string> = {};
       const userTexts: Record<string, string> = {};
 
@@ -910,7 +909,15 @@ export default function App() {
         if (scene.userImageUrl) {
           userImages[`image_${idx}`] = scene.userImageUrl;
         }
-        userTexts[`text_${idx}`] = scene.content || "";
+
+        // AE 레이어 이름 기반 매핑 (텍스트12~13 등)
+        const adminScene = activeTemplate?.scenes.find(s => s.id === scene.id);
+        const key = adminScene?.aeLayerName || `text_${idx}`;
+
+        // 내용이 있는 경우에만 업데이트 (범위 내 첫 번째 장면의 내용이 공유됨)
+        if (scene.content && scene.content.trim() !== "") {
+          userTexts[key] = scene.content;
+        }
       });
 
       // 3. Dispatch to Cloud
@@ -986,6 +993,24 @@ export default function App() {
         console.error(err);
       }
     }
+  };
+
+  // 헬퍼 함수: 범위 텍스트(12~13 등) 상속 로직
+  const getInheritedContent = (idx: number) => {
+    const item = activeProject ? activeProject.userScenes[idx] : activeTemplate?.scenes[idx];
+    if (!item) return "";
+    const currentContent = (item as UserScene).content || (item as AdminScene).defaultContent;
+    if (currentContent && currentContent.trim() !== "") return currentContent;
+
+    const adminScene = activeTemplate?.scenes[idx];
+    if (adminScene?.aeLayerName && activeProject) {
+      const representative = activeProject.userScenes.find(s => {
+        const sAdmin = activeTemplate?.scenes.find(as => as.id === s.id);
+        return sAdmin?.aeLayerName === adminScene.aeLayerName && s.content && s.content.trim() !== "";
+      });
+      if (representative) return representative.content;
+    }
+    return "";
   };
 
   // [명예 회복] 템플릿 삭제 및 연쇄 삭제 로직
@@ -1475,14 +1500,18 @@ export default function App() {
                     style={{ aspectRatio: `${templateDimensions.width} / ${templateDimensions.height}` }}
                   >
                     <ScenePreview
-                      scene={{ ...item, width: templateDimensions.width, height: templateDimensions.height }}
+                      scene={{ ...item, width: templateDimensions.width, height: templateDimensions.height, content: getInheritedContent(idx) }}
                       adminConfig={isAdminMode ? undefined : activeTemplate?.scenes[idx]}
                       isAdmin={isAdminMode}
                       className="group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gray-900/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-500 backdrop-blur-[1px] z-[50]"><span className="bg-white px-6 py-3 rounded-full text-[9px] font-black uppercase shadow-2xl tracking-widest">장면 수정</span></div>
                   </div>
-                  <div className="p-8 md:p-10"><p className="text-sm font-bold text-gray-400 line-clamp-2 italic leading-relaxed text-center">&quot;{(item as UserScene).content || (item as AdminScene).defaultContent || '이야기를 들려주세요...'}&quot;</p></div>
+                  <div className="p-8 md:p-10">
+                    <p className="text-sm font-bold text-gray-400 line-clamp-2 italic leading-relaxed text-center">
+                      &quot;{getInheritedContent(idx) || '이야기를 들려주세요...'}&quot;
+                    </p>
+                  </div>
                 </div>
               ))}
               {isAdminMode && (
@@ -1520,7 +1549,7 @@ export default function App() {
       {editingSceneIdx !== null && (activeTemplate || activeProject) && (
         <SceneEditor
           adminScene={activeTemplate ? activeTemplate.scenes[editingSceneIdx] : {} as AdminScene}
-          userScene={activeProject ? activeProject.userScenes[editingSceneIdx] : {} as UserScene}
+          userScene={{ ... (activeProject ? activeProject.userScenes[editingSceneIdx] : {} as UserScene), content: getInheritedContent(editingSceneIdx) }}
           isAdminMode={isAdminMode}
           width={templateDimensions.width}
           height={templateDimensions.height}
