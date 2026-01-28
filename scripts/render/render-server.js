@@ -78,19 +78,40 @@ async function render() {
         const page = await browser.newPage();
         await page.setViewport({ width: template.w, height: template.h });
 
+        // 대용량 템플릿을 임시 파일로 저장 (HTML 인라인 파싱 문제 해결)
+        const tempTemplateFile = path.join(__dirname, 'temp_template.json');
+        fs.writeFileSync(tempTemplateFile, JSON.stringify(template));
+        console.log(`💾 Template saved to temporary file (${JSON.stringify(template).length} bytes)`);
+
+        // 페이지에 파일 서버 시작
+        await page.setRequestInterception(true);
+        page.on('request', (interceptedRequest) => {
+            if (interceptedRequest.url().endsWith('/temp_template.json')) {
+                interceptedRequest.respond({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: fs.readFileSync(tempTemplateFile)
+                });
+            } else {
+                interceptedRequest.continue();
+            }
+        });
+
         const lottieCdn = 'https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js';
         const htmlContent = `
         <html>
         <head><script src="${lottieCdn}"></script></head>
         <body style="margin:0; background:black;"><div id="lottie" style="width:${template.w}px;height:${template.h}px"></div>
         <script>
+            // 파일 경로로 로드 (인라인 JSON 대신)
             const animation = lottie.loadAnimation({
                 container: document.getElementById('lottie'),
                 renderer: 'canvas',
                 loop: false, autoplay: false,
-                animationData: ${JSON.stringify(template)}
+                path: '/temp_template.json'
             });
             animation.addEventListener('DOMLoaded', () => {
+                console.log('Lottie DOMLoaded event fired');
                 const userImages = ${JSON.stringify(userImages || {})};
                 const userTexts = ${JSON.stringify(userTexts || {})};
                 animation.assets.forEach(asset => { if(userImages[asset.id]) { asset.p = userImages[asset.id]; asset.u = ''; } });
@@ -102,6 +123,9 @@ async function render() {
                 };
                 searchLayers(animation.layers);
                 window.isLottieReady = true;
+            });
+            animation.addEventListener('data_ready', () => {
+                console.log('Lottie data_ready event fired');
             });
         </script></body></html>`;
 
