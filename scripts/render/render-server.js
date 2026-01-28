@@ -77,15 +77,21 @@ async function render() {
         const fullTemplate = await res.json();
         console.log(`✅ Template fetched (${JSON.stringify(fullTemplate).length} bytes)`);
 
-        // 2. 씬 컴포지션 찾기 (이름에 "사진" 포함)
-        const sceneComps = fullTemplate.assets.filter(a =>
-            a.layers && a.nm && (a.nm.includes('사진') || a.nm.includes('Photo'))
-        );
+        // 2. 모든 컴포지션 로그 출력
+        console.log('\n📋 All compositions in template:');
+        fullTemplate.assets.forEach((a, idx) => {
+            if (a.layers) {
+                console.log(`  [${idx}] ${a.nm} (w:${a.w}, h:${a.h}, layers:${a.layers.length})`);
+            }
+        });
 
-        console.log(`📦 Found ${sceneComps.length} scene compositions`);
+        // 3. 씬 컴포지션 찾기 (layers를 가진 모든 컴포지션)
+        const sceneComps = fullTemplate.assets.filter(a => a.layers && a.layers.length > 0);
+
+        console.log(`\n📦 Using ${sceneComps.length} compositions for rendering`);
 
         if (sceneComps.length === 0) {
-            throw new Error('No scene compositions found in template');
+            throw new Error('No compositions with layers found in template');
         }
 
         await updateProgress(5);
