@@ -1196,6 +1196,32 @@ export default function App() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [lottieTemplate, setLottieTemplate] = useState<any>(null);
 
+  // Auto-load Lottie template when activeTemplate changes
+  useEffect(() => {
+    const loadTemplate = async () => {
+      if (activeTemplate?.id) {
+        try {
+          const res = await fetch(`/templates/${activeTemplate.id}.json`);
+          if (res.ok) {
+            const data = await res.json();
+            setLottieTemplate(data);
+            console.log(`✅ Lottie template loaded: ${activeTemplate.id}`);
+          } else {
+            console.warn(`⚠️ Template file not found: ${activeTemplate.id}.json`);
+            setLottieTemplate(null);
+          }
+        } catch (e) {
+          console.error("Failed to load Lottie template:", e);
+          setLottieTemplate(null);
+        }
+      } else {
+        setLottieTemplate(null);
+      }
+    };
+
+    loadTemplate();
+  }, [activeTemplate?.id]);
+
   const handleOpenRendering = async () => {
     setIsRendering(true);
     // Load default Lottie template (could be dynamic later)
