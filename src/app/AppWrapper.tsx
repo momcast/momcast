@@ -23,6 +23,7 @@ import {
   type BaseScene,
   type UserRequest
 } from './types'
+import lottie, { AnimationItem } from 'lottie-web';
 
 const Icons = {
   Change: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
@@ -44,6 +45,47 @@ const Icons = {
 const STICKER_COUNT = 20;
 const STICKER_URLS = Array.from({ length: STICKER_COUNT }, (_, i) => `/stickers/sticker_${i}.png`);
 
+// Helper: Extract single scene from full template JSON
+function extractSceneLottie(fullTemplate: any, sceneCompId: string): any {
+  if (!fullTemplate || !sceneCompId) return null;
+  const sceneComp = fullTemplate.assets?.find((a: any) => a.id === sceneCompId);
+  if (!sceneComp) return null;
+
+  const usedAssetIds = new Set<string>();
+  function collectAssets(layers: any[]) {
+    if (!layers) return;
+    layers.forEach(layer => {
+      if (layer.refId) usedAssetIds.add(layer.refId);
+      if (layer.layers) collectAssets(layer.layers);
+    });
+  }
+  collectAssets(sceneComp.layers || []);
+
+  let prevSize = 0;
+  while (usedAssetIds.size > prevSize) {
+    prevSize = usedAssetIds.size;
+    Array.from(usedAssetIds).forEach(id => {
+      const asset = fullTemplate.assets?.find((a: any) => a.id === id);
+      if (asset && asset.layers) collectAssets(asset.layers);
+    });
+  }
+
+  const sceneAssets = fullTemplate.assets?.filter((a: any) => usedAssetIds.has(a.id)) || [];
+
+  return {
+    v: fullTemplate.v,
+    fr: fullTemplate.fr,
+    ip: 0,
+    op: (sceneComp.op || 100) - (sceneComp.ip || 0),
+    w: sceneComp.w,
+    h: sceneComp.h,
+    nm: sceneComp.nm,
+    ddd: 0,
+    assets: sceneAssets,
+    layers: sceneComp.layers || []
+  };
+}
+
 const transparencyGridStyle = {
   backgroundImage: 'linear-gradient(45deg, #f9f9f9 25%, transparent 25%), linear-gradient(-45deg, #f9f9f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f9f9f9 75%), linear-gradient(-45deg, transparent 75%, #f9f9f9 75%)',
   backgroundSize: '16px 16px',
@@ -51,16 +93,144 @@ const transparencyGridStyle = {
   backgroundColor: '#ffffff'
 };
 
+const LottieSingleFramePreview: React.FC<{
+  fullTemplate: any;
+  sceneId: string;
+  userImageUrl?: string;
+  width: number;
+  height: number;
+  className?: string;
+}> = React.memo(({ fullTemplate, sceneId, userImageUrl, width, height, className }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<AnimationItem | null>(null);
+
+  // 1. Extract scene JSON (memoized)
+  const sceneJson = React.useMemo(() => {
+    return extractSceneLottie(fullTemplate, sceneId);
+  }, [fullTemplate, sceneId]);
+
+  // 2. Load Animation & Apply Image
+  useEffect(() => {
+    if (!containerRef.current || !sceneJson) return;
+
+    // Clean up previous animation
+    if (animRef.current) {
+      animRef.current.destroy();
+    }
+
+    try {
+      const anim = lottie.loadAnimation({
+        container: containerRef.current,
+        renderer: 'svg', // svg is better for scaling
+        loop: false,
+        autoplay: false, // We want a static frame
+        animationData: JSON.parse(JSON.stringify(sceneJson)), // Deep copy to avoid mutation issues
+      });
+
+      animRef.current = anim;
+
+      // Wait for data to be ready to swap image
+      anim.addEventListener('DOMLoaded', () => {
+        // Swap Image if userImageUrl exists
+        if (userImageUrl) {
+          const assets = (anim as any).assets; // Access internal assets
+          if (assets) {
+            assets.forEach((asset: any) => {
+              // Simple heuristic: if asset is an image, replace it. 
+              // In a real scenario, we might want to target specific layers or assets.
+              // Since extractSceneLottie extracts *used* assets, replacing them should be fine.
+              if (asset.p) { // 'p' is path in Lottie assets
+                // Update internal asset path to the user image
+                // Note: Lottie-web doesn't have a direct 'updateImage' API for simple usage,
+                // but modifying the asset object or using renderer.updateImage works.
+                // Easier way for SVG renderer: find the <image> tag in DOM
+              }
+            });
+
+            // Safer SVG DOM manipulation approach for "Photo" placeholders
+            const svg = containerRef.current?.querySelector('svg');
+            if (svg) {
+              const images = svg.querySelectorAll('image');
+              images.forEach(img => {
+                // Check if this image corresponds to a placeholder (usually has a specific size or id)
+                // For now, replace ALL images in this scene with the user photo 
+                // (assuming one main photo per scene as per "Photo**" naming convention in template)
+                if (img.getAttribute('href') || img.getAttribute('xlink:href')) {
+                  img.setAttribute('href', userImageUrl);
+                  img.setAttribute('preserveAspectRatio', 'xMidYMid slice'); // Ensure cover fit
+                }
+              });
+            }
+          }
+        }
+
+        // Go to middle frame or a specific representative frame
+        // sceneJson.op is duration in frames. 
+        // Showing 50% or frame 10 (to skip initial fades)
+        const targetFrame = Math.min((sceneJson.op || 60) / 2, 30);
+        anim.goToAndStop(targetFrame, true);
+      });
+
+    } catch (e) {
+      console.error("Lottie load error:", e);
+    }
+
+    return () => {
+      animRef.current?.destroy();
+    };
+  }, [sceneJson, userImageUrl]);
+
+  const isVertical = height > width;
+
+  return (
+    <div
+      className={`relative overflow-hidden w-full ${className} bg-black flex items-center justify-center`}
+      style={{ aspectRatio: '16 / 9' }}
+    >
+      {!sceneJson ? (
+        <div className="text-xs text-gray-400">Preview Unavailable</div>
+      ) : (
+        <div
+          ref={containerRef}
+          className="relative bg-white"
+          style={{
+            width: isVertical ? 'auto' : '100%',
+            height: isVertical ? '100%' : 'auto',
+            aspectRatio: `${width} / ${height}`
+          }}
+        />
+      )}
+    </div>
+  );
+});
+
 const ScenePreview: React.FC<{
   scene: BaseScene & { userImageUrl?: string; overlayUrl?: string; isEditing?: boolean; width?: number; height?: number; content?: string };
   adminConfig?: AdminScene;
   isAdmin?: boolean;
   className?: string;
   hideOverlay?: boolean;
-}> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false }) => {
+
+  lottieTemplate?: any; // Pass full lottie template if available
+}> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false, lottieTemplate }) => {
   const displayScene = scene;
   const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
 
+  // New Lottie Preview Logic
+  if (lottieTemplate && scene.id) {
+    return (
+      <LottieSingleFramePreview
+        fullTemplate={lottieTemplate}
+        sceneId={scene.id}
+        userImageUrl={displayScene.userImageUrl}
+        width={scene.width || 1920}
+        height={scene.height || 1080}
+        className={className}
+      />
+    );
+  }
+
+  // Fallback to original CSS/Image implementation
   const crop = displayScene.cropRect || { top: 0, left: 0, right: 0, bottom: 0 };
   const userImageUrl = displayScene.userImageUrl;
 
@@ -313,7 +483,8 @@ const SceneEditor: React.FC<{
   onSave: (updatedScene: AdminScene | UserScene) => void;
   width?: number;
   height?: number;
-}> = ({ adminScene, userScene, isAdminMode, onClose, onSave, width, height }) => {
+  lottieTemplate?: any;
+}> = ({ adminScene, userScene, isAdminMode, onClose, onSave, width, height, lottieTemplate }) => {
   const [currentScene, setCurrentScene] = useState<AdminScene | UserScene>(() => {
     const base: AdminScene | UserScene = isAdminMode ? adminScene : userScene;
 
@@ -520,80 +691,167 @@ const SceneEditor: React.FC<{
           </header>
 
           <div className="flex-1 p-4 md:p-8 flex items-center justify-center relative overflow-hidden">
-            <div
-              ref={viewportRef}
-              className={`w-full max-w-4xl relative overflow-hidden bg-white shadow-2xl rounded-2xl touch-none select-none border border-gray-200 ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
-              style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}
-              onPointerDown={handleViewportPointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-            >
-              <ScenePreview
-                scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }} // Pass flag to hide static stickers relative to ScenePreview
-                adminConfig={isAdminMode ? undefined : adminScene}
-                isAdmin={isAdminMode}
-                hideOverlay={!showGuideOverlay}
-              />
+            {/* Letterbox Wrapper for Vertical Scenes */}
+            {(height || 0) > (width || 0) ? (
+              <div className="w-full max-w-6xl max-h-[70vh] aspect-video bg-black rounded-2xl flex items-center justify-center shadow-2xl border border-gray-800">
+                <div
+                  ref={viewportRef}
+                  className={`relative overflow-hidden bg-white shadow-2xl touch-none select-none ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
+                  style={{
+                    height: '100%',
+                    aspectRatio: `${width || 1080} / ${height || 1920}`
+                  }}
+                  onPointerDown={handleViewportPointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                >
+                  <ScenePreview
+                    scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }}
+                    adminConfig={isAdminMode ? undefined : adminScene}
+                    isAdmin={isAdminMode}
+                    hideOverlay={!showGuideOverlay}
+                  />
 
-              {mode === 'camera' && (
-                <div className="absolute inset-0 bg-black z-50">
-                  <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
-                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
-                    <div onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 active:scale-95 transition-transform cursor-pointer"></div>
-                    <button onClick={() => { stopCamera(); setMode('edit'); }} className="px-6 py-2 bg-red-50 text-white rounded-full font-bold shadow-lg">취소</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Render Interactive Stickers Layer */}
-              <div className="absolute inset-0 z-40 overflow-hidden pointer-events-none">
-                {(currentScene.stickers || []).map((s: Sticker) => (
-                  <div key={s.id} className="pointer-events-auto">
-                    <StickerOverlay
-                      sticker={s}
-                      isSelected={selectedStickerId === s.id}
-                      onSelect={() => setSelectedStickerId(s.id)}
-                      onDelete={() => {
-                        setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, stickers: (prev.stickers || []).filter(st => st.id !== s.id) }));
-                        setSelectedStickerId(null);
-                      }}
-                      onUpdate={(updated) => {
-                        setCurrentScene((prev: AdminScene | UserScene) => ({
-                          ...prev,
-                          stickers: prev.stickers.map(st => st.id === s.id ? updated : st)
-                        }));
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {isCropMode && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100">
-                  {cropImageSrc && (
-                    <img src={cropImageSrc} alt="Image to crop" className="w-full h-full object-contain pointer-events-none select-none" />
+                  {mode === 'camera' && (
+                    <div className="absolute inset-0 bg-black z-50">
+                      <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
+                      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
+                        <div onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 active:scale-95 transition-transform cursor-pointer"></div>
+                        <button onClick={() => { stopCamera(); setMode('edit'); }} className="px-6 py-2 bg-red-50 text-white rounded-full font-bold shadow-lg">취소</button>
+                      </div>
+                    </div>
                   )}
-                  <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
-                    <div
-                      className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
-                      style={{
-                        top: `${crop.top}%`,
-                        left: `${crop.left}%`,
-                        right: `${crop.right}%`,
-                        bottom: `${crop.bottom}%`
-                      }}
-                    >
-                      {['topleft', 'topright', 'bottomleft', 'bottomright'].map(dir => (
-                        <div key={dir} onPointerDown={(e) => handleCropDrag(e, dir)} className={`absolute ${dir.includes('top') ? 'top-0' : 'bottom-0'} ${dir.includes('left') ? 'left-0' : 'right-0'} w-12 h-12 pointer-events-auto cursor-pointer flex items-center justify-center -m-6`}>
-                          <div className="w-6 h-6 border-4 border-[#ffb3a3] bg-white rounded-full shadow-xl" />
+
+                  {/* Render Interactive Stickers Layer */}
+                  <div className="absolute inset-0 z-40 overflow-hidden pointer-events-none">
+                    {(currentScene.stickers || []).map((s: Sticker) => (
+                      <div key={s.id} className="pointer-events-auto">
+                        <StickerOverlay
+                          sticker={s}
+                          isSelected={selectedStickerId === s.id}
+                          onSelect={() => setSelectedStickerId(s.id)}
+                          onDelete={() => {
+                            setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, stickers: (prev.stickers || []).filter(st => st.id !== s.id) }));
+                            setSelectedStickerId(null);
+                          }}
+                          onUpdate={(updated) => {
+                            setCurrentScene((prev: AdminScene | UserScene) => ({
+                              ...prev,
+                              stickers: prev.stickers.map(st => st.id === s.id ? updated : st)
+                            }));
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {isCropMode && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100">
+                      {cropImageSrc && (
+                        <img src={cropImageSrc} alt="Image to crop" className="w-full h-full object-contain pointer-events-none select-none" />
+                      )}
+                      <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
+                        <div
+                          className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
+                          style={{
+                            top: `${crop.top}%`,
+                            left: `${crop.left}%`,
+                            right: `${crop.right}%`,
+                            bottom: `${crop.bottom}%`
+                          }}
+                        >
+                          {['topleft', 'topright', 'bottomleft', 'bottomright'].map(dir => (
+                            <div key={dir} onPointerDown={(e) => handleCropDrag(e, dir)} className={`absolute ${dir.includes('top') ? 'top-0' : 'bottom-0'} ${dir.includes('left') ? 'left-0' : 'right-0'} w-12 h-12 pointer-events-auto cursor-pointer flex items-center justify-center -m-6`}>
+                              <div className="w-6 h-6 border-4 border-[#ffb3a3] bg-white rounded-full shadow-xl" />
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                      <div className="absolute bottom-10 z-[70] flex gap-4 pointer-events-auto">
+                        <button onClick={() => setIsCropMode(false)} className="px-6 py-3 bg-gray-900 text-white rounded-full font-bold shadow-xl active:scale-95">완료</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // Original Code for Horizontal Scenes
+              <div
+                ref={viewportRef}
+                className={`w-full max-w-4xl relative overflow-hidden bg-white shadow-2xl rounded-2xl touch-none select-none border border-gray-200 ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
+                style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}
+                onPointerDown={handleViewportPointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+              >
+                <ScenePreview
+                  scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }} // Pass flag to hide static stickers relative to ScenePreview
+                  adminConfig={isAdminMode ? undefined : adminScene}
+                  isAdmin={isAdminMode}
+                  hideOverlay={!showGuideOverlay}
+                  lottieTemplate={lottieTemplate}
+                />
+
+                {mode === 'camera' && (
+                  <div className="absolute inset-0 bg-black z-50">
+                    <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
+                    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
+                      <div onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 active:scale-95 transition-transform cursor-pointer"></div>
+                      <button onClick={() => { stopCamera(); setMode('edit'); }} className="px-6 py-2 bg-red-50 text-white rounded-full font-bold shadow-lg">취소</button>
                     </div>
                   </div>
+                )}
+
+                {/* Render Interactive Stickers Layer */}
+                <div className="absolute inset-0 z-40 overflow-hidden pointer-events-none">
+                  {(currentScene.stickers || []).map((s: Sticker) => (
+                    <div key={s.id} className="pointer-events-auto">
+                      <StickerOverlay
+                        sticker={s}
+                        isSelected={selectedStickerId === s.id}
+                        onSelect={() => setSelectedStickerId(s.id)}
+                        onDelete={() => {
+                          setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, stickers: (prev.stickers || []).filter(st => st.id !== s.id) }));
+                          setSelectedStickerId(null);
+                        }}
+                        onUpdate={(updated) => {
+                          setCurrentScene((prev: AdminScene | UserScene) => ({
+                            ...prev,
+                            stickers: prev.stickers.map(st => st.id === s.id ? updated : st)
+                          }));
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
-              )}
-              {isUploading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-[100] backdrop-blur-sm"><span className="animate-pulse font-black text-xs uppercase tracking-widest text-[#ffb3a3]">사진 처리 중...</span></div>}
-            </div>
+
+                {isCropMode && (
+                  <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100">
+                    {cropImageSrc && (
+                      <img src={cropImageSrc} alt="Image to crop" className="w-full h-full object-contain pointer-events-none select-none" />
+                    )}
+                    <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
+                      <div
+                        className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
+                        style={{
+                          top: `${crop.top}%`,
+                          left: `${crop.left}%`,
+                          right: `${crop.right}%`,
+                          bottom: `${crop.bottom}%`
+                        }}
+                      >
+                        {['topleft', 'topright', 'bottomleft', 'bottomright'].map(dir => (
+                          <div key={dir} onPointerDown={(e) => handleCropDrag(e, dir)} className={`absolute ${dir.includes('top') ? 'top-0' : 'bottom-0'} ${dir.includes('left') ? 'left-0' : 'right-0'} w-12 h-12 pointer-events-auto cursor-pointer flex items-center justify-center -m-6`}>
+                            <div className="w-6 h-6 border-4 border-[#ffb3a3] bg-white rounded-full shadow-xl" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {isUploading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-[100] backdrop-blur-sm"><span className="animate-pulse font-black text-xs uppercase tracking-widest text-[#ffb3a3]">사진 처리 중...</span></div>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1536,6 +1794,7 @@ export default function App() {
                       adminConfig={isAdminMode ? undefined : activeTemplate?.scenes[idx]}
                       isAdmin={isAdminMode}
                       className="group-hover:scale-105 transition-transform duration-500"
+                      lottieTemplate={lottieTemplate}
                     />
                     <div className="absolute inset-0 bg-gray-900/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-500 backdrop-blur-[1px] z-[50]"><span className="bg-white px-6 py-3 rounded-full text-[9px] font-black uppercase shadow-2xl tracking-widest">장면 수정</span></div>
                   </div>
@@ -1596,8 +1855,10 @@ export default function App() {
               ns[editingSceneIdx] = updated as AdminScene;
               setActiveTemplate({ ...activeTemplate, scenes: ns });
             }
+
             setEditingSceneIdx(null);
           }}
+          lottieTemplate={lottieTemplate}
         />
       )}
 
