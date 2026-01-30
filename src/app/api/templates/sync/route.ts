@@ -20,125 +20,158 @@ export async function POST(req: NextRequest) {
         }
 
         const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.toLowerCase().endsWith('.json'));
-        console.log(`[Sync] Found ${files.length} JSON files in ${TEMPLATES_DIR}:`, files);
         const results = [];
+
+        // 헬퍼 함수 1: 재귀적 슬롯 검색
+        const findSlotsRecursively = (compId: string, lottieJson: any, visited = new Set()) => {
+            if (visited.has(compId)) return { photos: [], texts: [] };
+            visited.add(compId);
+
+            const comp = lottieJson.assets.find((a: any) => a.id === compId);
+            if (!comp || !comp.layers) return { photos: [], texts: [] };
+
+            let results: { photos: any[], texts: any[] } = { photos: [], texts: [] };
+
+            comp.layers.forEach((layer: any) => {
+                if (layer.ty === 0 && layer.refId) {
+                    const refAsset = lottieJson.assets.find((a: any) => a.id === layer.refId);
+                    if (!refAsset) return;
+
+                    if (refAsset.nm?.match(/^사진\d+$/)) {
+                        results.photos.push({ id: refAsset.id, name: refAsset.nm });
+                    }
+                    else if (refAsset.nm?.match(/^텍스트\d+$/)) {
+                        results.texts.push({ id: refAsset.id, name: refAsset.nm });
+                    }
+                    else {
+                        const subResults = findSlotsRecursively(layer.refId, lottieJson, visited);
+                        results.photos.push(...subResults.photos);
+                        results.texts.push(...subResults.texts);
+                    }
+                }
+            });
+            return results;
+        };
+
+        // 헬퍼 함수 2: 중복 텍스트 감지 (Legacy 호환성)
+        const detectSharedText = (scenes: any[]) => {
+            const textMap: any = {};
+            scenes.forEach(scene => {
+                scene.slots.texts.forEach((t: any) => {
+                    if (!textMap[t.id]) {
+                        textMap[t.id] = { id: t.id, name: t.name, usedInScenes: [], firstAppearance: scene.id };
+                    }
+                    textMap[t.id].usedInScenes.push(scene.id);
+                });
+            });
+            return Object.values(textMap);
+        };
 
         for (const file of files) {
             const filePath = path.join(TEMPLATES_DIR, file);
             const templateId = file.replace('.json', '');
 
             try {
-                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                const { w, h, nm, assets, layers: topLayers } = data;
+                const lottieJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
-                // 헬퍼 함수: 이름에서 숫자 추출
-                const extractNumber = (name: string): number | null => {
-                    const match = name?.match(/\d+/);
-                    return match ? parseInt(match[0]) : null;
-                };
-
-                // 0. 'scene' 폴더 찾기 (선택적)
-                const sceneFolder = (assets || []).find((a: any) =>
-                    a.nm && a.nm.toLowerCase() === 'scene'
+                // 씬 컨테이너 찾기 (scene_all 등)
+                let sceneFolderComp = lottieJson.assets.find((a: any) =>
+                    a.nm?.match(/^(scene_all|scesne|scene)s?$/i) && a.layers
                 );
 
-                let targetAssets = assets || [];
-
-                if (sceneFolder) {
-                    // 'scene' 폴더가 있으면 해당 폴더 내부의 컴포지션만 사용
-                    const sceneFolderPath = sceneFolder.u;
-                    targetAssets = (assets || []).filter((a: any) =>
-                        a.u === sceneFolderPath && a.layers
+                if (!sceneFolderComp && lottieJson.layers) {
+                    const rootSceneLayer = lottieJson.layers.find((l: any) =>
+                        l.nm?.match(/^(scene_all|scesne|scene)s?$/i) && l.refId
                     );
-                    console.log(`[Sync] Found 'scene' folder. Using ${targetAssets.length} compositions inside it.`);
-                } else {
-                    console.log(`[Sync] No 'scene' folder found. Scanning all compositions.`);
+                    if (rootSceneLayer) {
+                        sceneFolderComp = lottieJson.assets.find((a: any) => a.id === rootSceneLayer.refId);
+                    }
                 }
 
-                // 1. 사진 컴포지션 분석
-                const photoComps = targetAssets.filter((a: any) =>
-                    a.layers && a.nm && a.nm.includes('사진')
-                );
+                if (!sceneFolderComp) {
+                    // 차선책: 레이어 수가 많은 컴포지션을 씬 폴더로 추측
+                    sceneFolderComp = lottieJson.assets.find((a: any) => a.layers && a.layers.length >= 30);
+                }
 
-                console.log(`[Sync] Found ${photoComps.length} photo compositions.`);
-
-                // 2. 텍스트 컴포지션 분석
-                const textComps = targetAssets.filter((a: any) =>
-                    a.layers && a.nm && a.nm.includes('텍스트')
-                );
-
-                console.log(`[Sync] Found ${textComps.length} text compositions.`);
-
-                // 3. 사진과 텍스트의 모든 번호 추출
-                const photoNumbers = photoComps.map((c: any) => extractNumber(c.nm)).filter((n: any) => n !== null) as number[];
-                const textNumbers = textComps.map((c: any) => extractNumber(c.nm)).filter((n: any) => n !== null) as number[];
-
-                // 4. 번호 합집합 구하기 (중복 제거 및 정렬)
-                const allNumbers = Array.from(new Set([...photoNumbers, ...textNumbers])).sort((a, b) => a - b);
-
-                console.log(`[Sync] Scene numbers detected:`, allNumbers);
-
-                if (allNumbers.length === 0) {
-                    console.log(`[Sync] No numbered scenes found. Skipping ${file}.`);
-                    results.push({ file, status: 'skipped', message: 'No numbered photo or text compositions found' });
+                if (!sceneFolderComp) {
+                    results.push({ file, status: 'skipped', message: 'Could not find any scene container composition' });
                     continue;
                 }
 
-                // 5. 각 번호에 대해 씬 생성
-                const scenes = allNumbers.map((num, idx) => {
-                    // 해당 번호의 사진/텍스트 컴포지션 찾기
-                    const photoComp = photoComps.find((c: any) => extractNumber(c.nm) === num);
-                    const textComp = textComps.find((c: any) => extractNumber(c.nm) === num);
+                const rawScenes: any[] = [];
+                sceneFolderComp.layers.forEach((layer: any) => {
+                    if (layer.ty === 0 && layer.refId) {
+                        const sceneCompAsset = lottieJson.assets.find((a: any) => a.id === layer.refId);
+                        if (!sceneCompAsset) return;
 
-                    // 사진이나 텍스트 중 하나라도 있으면 해당 정보 사용
-                    const sceneWidth = photoComp?.w || textComp?.w || w || 1920;
-                    const sceneHeight = photoComp?.h || textComp?.h || h || 1080;
-
-                    return {
-                        id: photoComp?.id || textComp?.id || `scene_${num}`,
-                        name: `장면 ${num}`,
-                        sceneNumber: num,
-                        hasPhoto: !!photoComp,
-                        hasText: !!textComp,
-                        width: sceneWidth,
-                        height: sceneHeight,
-                        rotation: 0,
-                        zoom: 1,
-                        position: { x: 50, y: 50 },
-                        backgroundMode: 'transparent',
-                        backgroundColor: '#ffffff',
-                        cropRect: { top: 0, left: 0, right: 0, bottom: 0 },
-                        stickers: [],
-                        drawings: [],
-                        aeLayerName: textComp?.nm || null,
-                        defaultContent: textComp ? `${num}번 문구 입력` : "",
-                        allowUserUpload: true,
-                        allowUserText: !!textComp,
-                        allowUserDecorate: true
-                    };
+                        const match = sceneCompAsset.nm?.match(/^scene\s*(\d+)$/i);
+                        if (match) {
+                            rawScenes.push({
+                                asset: sceneCompAsset,
+                                num: parseInt(match[1]),
+                                layerName: layer.nm
+                            });
+                        }
+                    }
                 });
+
+                rawScenes.sort((a, b) => a.num - b.num);
+
+                const scenes: any[] = [];
+                const slotFirstAppearance = new Map();
+
+                rawScenes.forEach((sceneInfo, index) => {
+                    const rawSlots = findSlotsRecursively(sceneInfo.asset.id, lottieJson);
+
+                    const processSlots = (items: any[]) => {
+                        const uniqueInScene = Array.from(new Map(items.map(s => [s.id, s])).values());
+                        return uniqueInScene.map(slot => {
+                            const isFirstTime = !slotFirstAppearance.has(slot.id);
+                            if (isFirstTime) {
+                                slotFirstAppearance.set(slot.id, sceneInfo.asset.id);
+                            }
+                            return {
+                                id: slot.id,
+                                name: slot.name,
+                                isEditable: slotFirstAppearance.get(slot.id) === sceneInfo.asset.id
+                            };
+                        });
+                    };
+
+                    scenes.push({
+                        id: sceneInfo.asset.id,
+                        name: `씬 ${sceneInfo.num}`,
+                        order: index + 1,
+                        width: sceneInfo.asset.w,
+                        height: sceneInfo.asset.h,
+                        previewFrame: 0,
+                        slots: {
+                            photos: processSlots(rawSlots.photos),
+                            texts: processSlots(rawSlots.texts)
+                        }
+                    });
+                });
+
+                const textGroups = detectSharedText(scenes);
 
                 const templateData = {
                     id: templateId,
-                    name: nm || templateId,
+                    name: lottieJson.nm || templateId,
                     scene_count: scenes.length,
-                    width: w,
-                    height: h,
+                    width: lottieJson.w,
+                    height: lottieJson.h,
                     scenes: scenes,
+                    text_groups: textGroups,
                     updated_at: new Date().toISOString()
                 };
-
-                console.log(`[Sync] Upserting template: ${templateId}, scenes: ${scenes.length}`);
 
                 const { error: upsertError } = await supabase
                     .from('templates')
                     .upsert(templateData);
 
                 if (upsertError) {
-                    console.error(`[Sync] Upsert failed for ${file}:`, upsertError);
                     results.push({ file, status: 'error', message: upsertError.message });
                 } else {
-                    console.log(`[Sync] Successfully synced ${file}`);
                     results.push({ file, status: 'success', sceneCount: scenes.length });
                 }
 
