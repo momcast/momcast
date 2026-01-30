@@ -24,6 +24,8 @@ import {
   type UserRequest
 } from './types'
 import lottie, { AnimationItem } from 'lottie-web';
+import { LottieScenePreview } from '../components/LottieScenePreview';
+
 
 const Icons = {
   Change: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
@@ -93,228 +95,110 @@ const transparencyGridStyle = {
   backgroundColor: '#ffffff'
 };
 
-const LottieSingleFramePreview: React.FC<{
-  fullTemplate: any;
-  sceneId: string;
-  userImageUrl?: string;
-  width: number;
-  height: number;
+
+const ScenePreview: React.FC<{
+  scene: BaseScene & {
+    userImageUrl?: string;
+    overlayUrl?: string;
+    isEditing?: boolean;
+    width?: number;
+    height?: number;
+    content?: string;
+    slotImages?: Record<string, string>;
+    slotTexts?: Record<string, string>;
+  };
+  adminConfig?: AdminScene;
+  isAdmin?: boolean;
   className?: string;
-}> = React.memo(({ fullTemplate, sceneId, userImageUrl, width, height, className }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const animRef = useRef<AnimationItem | null>(null);
-
-  // 1. Extract scene JSON (memoized)
-  const sceneJson = React.useMemo(() => {
-    return extractSceneLottie(fullTemplate, sceneId);
-  }, [fullTemplate, sceneId]);
-
-  // 2. Load Animation & Apply Image
-  useEffect(() => {
-    if (!containerRef.current || !sceneJson) return;
-
-    // Clean up previous animation
-    if (animRef.current) {
-      animRef.current.destroy();
-    }
-
-    try {
-      const anim = lottie.loadAnimation({
-        container: containerRef.current,
-        renderer: 'svg', // svg is better for scaling
-        loop: false,
-        autoplay: false, // We want a static frame
-        animationData: JSON.parse(JSON.stringify(sceneJson)), // Deep copy to avoid mutation issues
-      });
-
-      animRef.current = anim;
-
-      // Wait for data to be ready to swap image
-      anim.addEventListener('DOMLoaded', () => {
-        // Swap Image if userImageUrl exists
-        if (userImageUrl) {
-          const assets = (anim as any).assets; // Access internal assets
-          if (assets) {
-            assets.forEach((asset: any) => {
-              // Simple heuristic: if asset is an image, replace it. 
-              // In a real scenario, we might want to target specific layers or assets.
-              // Since extractSceneLottie extracts *used* assets, replacing them should be fine.
-              if (asset.p) { // 'p' is path in Lottie assets
-                // Update internal asset path to the user image
-                // Note: Lottie-web doesn't have a direct 'updateImage' API for simple usage,
-                // but modifying the asset object or using renderer.updateImage works.
-                // Easier way for SVG renderer: find the <image> tag in DOM
-              }
-            });
-
-            // Safer SVG DOM manipulation approach for "Photo" placeholders
-            const svg = containerRef.current?.querySelector('svg');
-            if (svg) {
-              const images = svg.querySelectorAll('image');
-              images.forEach(img => {
-                // Check if this image corresponds to a placeholder (usually has a specific size or id)
-                // For now, replace ALL images in this scene with the user photo 
-                // (assuming one main photo per scene as per "Photo**" naming convention in template)
-                if (img.getAttribute('href') || img.getAttribute('xlink:href')) {
-                  img.setAttribute('href', userImageUrl);
-                  img.setAttribute('preserveAspectRatio', 'xMidYMid slice'); // Ensure cover fit
-                }
-              });
-            }
-          }
-        }
-
-        // Go to middle frame or a specific representative frame
-        // sceneJson.op is duration in frames. 
-        // Showing 50% or frame 10 (to skip initial fades)
-        const targetFrame = Math.min((sceneJson.op || 60) / 2, 30);
-        anim.goToAndStop(targetFrame, true);
-      });
-
-    } catch (e) {
-      console.error("Lottie load error:", e);
-    }
-
-    return () => {
-      animRef.current?.destroy();
-    };
-  }, [sceneJson, userImageUrl]);
-
+  hideOverlay?: boolean;
+  lottieTemplate?: any;
+}> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false, lottieTemplate }) => {
+  const displayScene = scene;
+  const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
+  const width = scene.width || 1920;
+  const height = scene.height || 1080;
   const isVertical = height > width;
+
+  // Prepare Slot Data for Lottie
+  const slots = isAdmin ? (scene as AdminScene).slots : adminConfig?.slots;
+  const userImages = { ...(scene as UserScene).slotImages };
+  const userTexts = { ...(scene as UserScene).slotTexts };
+
+  // Fallback for first slot mapping
+  if (slots?.photos?.[0] && !userImages[slots.photos[0].id] && displayScene.userImageUrl) {
+    userImages[slots.photos[0].id] = displayScene.userImageUrl;
+  }
+  if (slots?.texts?.[0] && !userTexts[slots.texts[0].id] && displayScene.content) {
+    userTexts[slots.texts[0].id] = displayScene.content;
+  }
 
   return (
     <div
       className={`relative overflow-hidden w-full ${className} bg-black flex items-center justify-center`}
       style={{ aspectRatio: '16 / 9' }}
     >
-      {!sceneJson ? (
-        <div className="text-xs text-gray-400">Preview Unavailable</div>
-      ) : (
-        <div
-          ref={containerRef}
-          className="relative bg-white"
-          style={{
-            width: isVertical ? 'auto' : '100%',
-            height: isVertical ? '100%' : 'auto',
-            aspectRatio: `${width} / ${height}`
-          }}
+      {/* 1. Lottie Background (If available) */}
+      {lottieTemplate && scene.id ? (
+        <LottieScenePreview
+          fullTemplate={lottieTemplate}
+          sceneId={scene.id}
+          slots={slots}
+          userImages={userImages}
+          userTexts={userTexts}
+          width={width}
+          height={height}
+          previewFrame={isAdmin ? (scene as AdminScene).previewFrame : adminConfig?.previewFrame}
+          className="absolute inset-0 z-0"
         />
-      )}
-    </div>
-  );
-});
-
-const ScenePreview: React.FC<{
-  scene: BaseScene & { userImageUrl?: string; overlayUrl?: string; isEditing?: boolean; width?: number; height?: number; content?: string };
-  adminConfig?: AdminScene;
-  isAdmin?: boolean;
-  className?: string;
-  hideOverlay?: boolean;
-
-  lottieTemplate?: any; // Pass full lottie template if available
-}> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false, lottieTemplate }) => {
-  const displayScene = scene;
-  const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
-
-  // New Lottie Preview Logic
-  if (lottieTemplate && scene.id) {
-    return (
-      <LottieSingleFramePreview
-        fullTemplate={lottieTemplate}
-        sceneId={scene.id}
-        userImageUrl={displayScene.userImageUrl}
-        width={scene.width || 1920}
-        height={scene.height || 1080}
-        className={className}
-      />
-    );
-  }
-
-  // Fallback to original CSS/Image implementation
-  const crop = displayScene.cropRect || { top: 0, left: 0, right: 0, bottom: 0 };
-  const userImageUrl = displayScene.userImageUrl;
-
-  const userCenterX = crop.left + (100 - crop.right - crop.left) / 2;
-  const userCenterY = crop.top + (100 - crop.bottom - crop.top) / 2;
-
-  const activeOverlay = isAdmin ? scene.overlayUrl : adminConfig?.overlayUrl;
-  const oCrop = overlayConfig?.cropRect || { top: 0, left: 0, right: 0, bottom: 0 };
-  const oCenterX = oCrop.left + (100 - oCrop.right - oCrop.left) / 2;
-  const oCenterY = oCrop.top + (100 - oCrop.bottom - oCrop.top) / 2;
-
-  return (
-    <div
-      className={`relative overflow-hidden w-full ${className}`}
-      style={{
-        aspectRatio: `${scene.width || 1920} / ${scene.height || 1080}`,
-        ...(displayScene.backgroundMode === 'solid' ? { backgroundColor: displayScene.backgroundColor } : (displayScene.backgroundMode === 'transparent' ? transparencyGridStyle : {}))
-      }}
-    >
-      {displayScene.backgroundMode === 'blur' && userImageUrl && (
-        <div className="absolute inset-0 scale-125 blur-3xl opacity-30 grayscale pointer-events-none" style={{ backgroundImage: `url(${userImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
-      )}
-
-      {userImageUrl && (
-        <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none"
-          style={{
-            transform: `translate(${displayScene.position?.x || 0}%, ${displayScene.position?.y || 0}%) rotate(${displayScene.rotation || 0}deg) scale(${displayScene.zoom || 1})`,
-            transformOrigin: `${userCenterX}% ${userCenterY}%`,
-          }}
-        >
-          <img
-            src={userImageUrl}
-            alt="User Scene"
-            loading="lazy"
-            className="w-full h-full object-contain pointer-events-none"
-            style={{ clipPath: `inset(${crop.top}% ${crop.right}% ${crop.bottom}% ${crop.left}%)` }}
-          />
-        </div>
-      )}
-
-      {activeOverlay && !hideOverlay && (
-        <div
-          className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center opacity-100"
-          style={{
-            transform: `translate(${overlayConfig?.position?.x || 0}%, ${overlayConfig?.position?.y || 0}%) rotate(${overlayConfig?.rotation || 0}deg) scale(${overlayConfig?.zoom || 1})`,
-            transformOrigin: `${oCenterX}% ${oCenterY}%`,
-            clipPath: `inset(${oCrop.top}% ${oCrop.right}% ${oCrop.bottom}% ${oCrop.left}%)`
-          }}
-        >
-          <img src={activeOverlay} alt="Overlay" loading="lazy" className="w-full h-full object-contain pointer-events-none" />
-        </div>
-      )}
-
-      {/* Text Overlay */}
-      {scene.content && (
-        <div className="absolute bottom-[10%] left-0 right-0 z-20 flex justify-center pointer-events-none">
-          <p className="bg-black/60 text-white px-6 py-2 rounded-full text-[12px] md:text-sm font-bold backdrop-blur-md shadow-xl border border-white/10 italic">
-            &quot;{scene.content}&quot;
-          </p>
-        </div>
-      )}
-
-      <svg className="absolute inset-0 w-full h-full pointer-events-none z-30" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {(displayScene.drawings || []).map((d: DrawPath) => (
-          <polyline key={d.id} points={d.points.map((pt: { x: number, y: number }) => `${pt.x},${pt.y}`).join(' ')} fill="none" stroke={d.color} strokeWidth={d.width / 15} strokeLinecap="round" strokeLinejoin="round" />
-        ))}
-      </svg>
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
-        {(displayScene.stickers || []).map((s: Sticker) => (
-          !scene.isEditing ? (
+      ) : (
+        /* Fallback Legacy Rendering (CSS/Image) */
+        <div className="absolute inset-0 flex items-center justify-center">
+          {displayScene.backgroundMode === 'blur' && displayScene.userImageUrl && (
+            <div className="absolute inset-0 scale-125 blur-3xl opacity-30 grayscale pointer-events-none" style={{ backgroundImage: `url(${displayScene.userImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+          )}
+          {displayScene.userImageUrl && (
             <div
-              key={s.id}
-              className="absolute pointer-events-none"
-              style={{ left: `${s.x}%`, top: `${s.y}%`, transform: `translate(-50%, -50%) scale(${s.scale})` }}
+              className="w-full h-full relative"
+              style={{ aspectRatio: `${width}/${height}`, transform: `translate(${displayScene.position?.x || 0}%, ${displayScene.position?.y || 0}%) rotate(${displayScene.rotation || 0}deg) scale(${displayScene.zoom || 1})` }}
             >
-              <img src={s.src} alt="Sticker" loading="lazy" className="w-16 h-16 md:w-20 md:h-20 object-contain pointer-events-none" />
+              <img src={displayScene.userImageUrl} className="w-full h-full object-contain" />
             </div>
-          ) : null
-        ))}
+          )}
+        </div>
+      )}
+
+      {/* 2. Interactive Overlays (Drawings & Stickers) - Locked to content area */}
+      <div
+        className="relative z-10 pointer-events-none"
+        style={{
+          width: isVertical ? 'auto' : '100%',
+          height: isVertical ? '100%' : 'auto',
+          aspectRatio: `${width} / ${height}`
+        }}
+      >
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-30" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {(displayScene.drawings || []).map((d: DrawPath) => (
+            <polyline key={d.id} points={d.points.map((pt: { x: number, y: number }) => `${pt.x},${pt.y}`).join(' ')} fill="none" stroke={d.color} strokeWidth={d.width / 15} strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+        </svg>
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
+          {(displayScene.stickers || []).map((s: Sticker) => (
+            !scene.isEditing ? (
+              <div
+                key={s.id}
+                className="absolute pointer-events-none"
+                style={{ left: `${s.x}%`, top: `${s.y}%`, transform: `translate(-50%, -50%) scale(${s.scale})` }}
+              >
+                <img src={s.src} alt="Sticker" loading="lazy" className="w-16 h-16 md:w-20 md:h-20 object-contain pointer-events-none" />
+              </div>
+            ) : null
+          ))}
+        </div>
       </div>
     </div>
   );
-}); // React.memo close
+});
+// React.memo close
 
 const ColorPickerRainbow: React.FC<{ currentColor: string; onColorChange: (color: string) => void }> = ({ currentColor, onColorChange }) => {
   const baseColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#8B00FF', '#000000', '#FFFFFF'];
@@ -498,6 +382,8 @@ const SceneEditor: React.FC<{
       cropRect: base.cropRect || { top: 0, left: 0, right: 0, bottom: 0 },
       stickers: base.stickers || [],
       drawings: base.drawings || [],
+      slotImages: (base as UserScene).slotImages || {},
+      slotTexts: (base as UserScene).slotTexts || {},
       // 독립적 권한 초기값 (없으면 기본값 true)
       ...(isAdminMode ? {
         allowUserUpload: (base as AdminScene).allowUserUpload ?? true,
@@ -507,8 +393,34 @@ const SceneEditor: React.FC<{
     };
   });
 
+  const slots = isAdminMode ? (currentScene as AdminScene).slots : adminScene.slots;
+
   const [mode, setMode] = useState<'edit' | 'decorate' | 'camera'>('edit');
   const [isCropMode, setIsCropMode] = useState(false);
+  const [activePhotoSlotId, setActivePhotoSlotId] = useState<string | null>(slots?.photos?.[0]?.id || null);
+
+  const handleFileChangeForSlot = async (slotId: string, file: File) => {
+    setIsUploading(true);
+    try {
+      const url = await uploadImage(file);
+      setCurrentScene((prev: any) => ({
+        ...prev,
+        slotImages: { ...(prev.slotImages || {}), [slotId]: url },
+        // Legacy compatibility for first slot
+        ...(slotId === slots?.photos?.[0]?.id ? { userImageUrl: url } : {})
+      }));
+    } finally { setIsUploading(false); }
+  };
+
+  const handleTextChangeForSlot = (slotId: string, text: string) => {
+    setCurrentScene((prev: any) => ({
+      ...prev,
+      slotTexts: { ...(prev.slotTexts || {}), [slotId]: text },
+      // Legacy compatibility for first slot
+      ...(slotId === slots?.texts?.[0]?.id ? { content: text } : {})
+    }));
+  };
+
   const [penColor, setPenColor] = useState('#000000');
   const [penWidth, setPenWidth] = useState(4);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -516,6 +428,7 @@ const SceneEditor: React.FC<{
   const [currentPath, setCurrentPath] = useState<DrawPath | null>(null);
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
   const [showGuideOverlay, setShowGuideOverlay] = useState(true);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -903,15 +816,44 @@ const SceneEditor: React.FC<{
           <div className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-32">
             {mode === 'edit' && (
               <div className="space-y-8">
-                {canUpload && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => fileInputRef.current?.click()} className="py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-                      <Icons.Change /> {isAdminMode ? '오버레이 교체' : '사진 교체'}
-                    </button>
-                    <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
+                {/* Photo Slots Selector & Actions */}
+                <div className="space-y-4">
+                  <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                    {slots?.photos.map(slot => (
+                      <button
+                        key={slot.id}
+                        onClick={() => setActivePhotoSlotId(slot.id)}
+                        className={`px-4 py-2 rounded-full whitespace-nowrap text-[9px] font-black uppercase transition-all border-2 ${activePhotoSlotId === slot.id ? 'border-gray-900 bg-gray-900 text-white shadow-lg' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'}`}
+                      >
+                        {slot.name} {!slot.isEditable && '🔒'}
+                      </button>
+                    ))}
                   </div>
-                )}
-                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+
+                  {canUpload && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => {
+                          const slot = slots?.photos.find(s => s.id === activePhotoSlotId);
+                          if (slot && !slot.isEditable && !isAdminMode) {
+                            alert('이 사진은 다른 씬과 공유되어 있어 이곳에서 수정할 수 없습니다.');
+                            return;
+                          }
+                          fileInputRef.current?.click();
+                        }}
+                        className={`py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all ${slots?.photos.find(s => s.id === activePhotoSlotId)?.isEditable === false && !isAdminMode ? 'opacity-30 grayscale' : ''}`}
+                      >
+                        <Icons.Change /> {isAdminMode ? '파일 교체' : '사진 교체'}
+                      </button>
+                      <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
+                    </div>
+                  )}
+                  <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && activePhotoSlotId) handleFileChangeForSlot(activePhotoSlotId, file);
+                  }} />
+                </div>
+
                 {canUpload && (
                   <div className="space-y-4">
                     <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">배경 모드</span>
@@ -1009,20 +951,40 @@ const SceneEditor: React.FC<{
             )}
 
             {(isAdminMode || canEditText) && (
-              <div className="space-y-4 border-t pt-8 border-gray-100">
+              <div className="space-y-6 border-t pt-8 border-gray-100">
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">문구작성</span>
                 </div>
-                <textarea
-                  className="w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner"
-                  value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                    setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }));
-                  }}
-                  placeholder="오늘의 소중한 순간을 기록해보세요..."
-                />
+
+                {slots && slots.texts.length > 0 ? (
+                  slots.texts.map(slot => (
+                    <div key={slot.id} className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-black uppercase text-gray-400">{slot.name}</span>
+                        {!slot.isEditable && !isAdminMode && <span className="text-[8px] bg-red-100 text-red-500 px-2 py-0.5 rounded font-black uppercase tracking-tighter">이전 씬에서 수정</span>}
+                      </div>
+                      <textarea
+                        disabled={!slot.isEditable && !isAdminMode}
+                        className={`w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-24 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner ${!slot.isEditable && !isAdminMode ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        value={(currentScene as UserScene).slotTexts?.[slot.id] || (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content)}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleTextChangeForSlot(slot.id, e.target.value)}
+                        placeholder={!slot.isEditable && !isAdminMode ? "이전 씬에서 수정된 내용이 자동 반영됩니다." : "이곳에 내용을 입력하세요..."}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <textarea
+                    className="w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner"
+                    value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                      setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }));
+                    }}
+                    placeholder="오늘의 소중한 순간을 기록해보세요..."
+                  />
+                )}
               </div>
             )}
+
           </div>
           <div className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-50 z-20">
             <button
@@ -1254,20 +1216,37 @@ export default function App() {
       const userImages: Record<string, string> = {};
       const userTexts: Record<string, string> = {};
 
-      project.userScenes.forEach((scene, idx) => {
-        if (scene.userImageUrl) {
-          userImages[`image_${idx}`] = scene.userImageUrl;
+      project.userScenes.forEach((scene) => {
+        // 1. Process slot images
+        if (scene.slotImages) {
+          Object.entries(scene.slotImages).forEach(([slotId, url]) => {
+            if (url) userImages[slotId] = url;
+          });
+        }
+        // Legacy fallback
+        if (scene.userImageUrl && !Object.values(userImages).includes(scene.userImageUrl)) {
+          // Mapping userImageUrl to first slot if not already there
+          const adminScene = activeTemplate?.scenes.find(s => s.id === scene.id);
+          if (adminScene?.slots?.photos?.[0]) {
+            userImages[adminScene.slots.photos[0].id] = scene.userImageUrl;
+          }
         }
 
-        // AE 레이어 이름 기반 매핑 (텍스트12~13 등)
-        const adminScene = activeTemplate?.scenes.find(s => s.id === scene.id);
-        const key = adminScene?.aeLayerName || `text_${idx}`;
-
-        // 내용이 있는 경우에만 업데이트 (범위 내 첫 번째 장면의 내용이 공유됨)
+        // 2. Process slot texts
+        if (scene.slotTexts) {
+          Object.entries(scene.slotTexts).forEach(([slotId, text]) => {
+            if (text && text.trim() !== "") userTexts[slotId] = text;
+          });
+        }
+        // Legacy fallback
         if (scene.content && scene.content.trim() !== "") {
-          userTexts[key] = scene.content;
+          const adminScene = activeTemplate?.scenes.find(s => s.id === scene.id);
+          if (adminScene?.slots?.texts?.[0] && !userTexts[adminScene.slots.texts[0].id]) {
+            userTexts[adminScene.slots.texts[0].id] = scene.content;
+          }
         }
       });
+
 
       // 3. Dispatch to Cloud
       const response = await fetch('/api/render/cloud', {
@@ -1344,23 +1323,43 @@ export default function App() {
     }
   };
 
-  // 헬퍼 함수: 범위 텍스트(12~13 등) 상속 로직
-  const getInheritedContent = (idx: number) => {
+  // 헬퍼 함수: 범위 텍스트(12~13 등) 상속 로직 (Legacy 지원 및 슬롯 대응)
+  const getInheritedContent = (idx: number, slotId?: string) => {
     const item = activeProject ? activeProject.userScenes[idx] : activeTemplate?.scenes[idx];
     if (!item) return "";
+
+    // 1. Specific slot content
+    if (slotId && (item as UserScene).slotTexts?.[slotId]) {
+      return (item as UserScene).slotTexts?.[slotId] || "";
+    }
+
+    // 2. Default content (Legacy)
     const currentContent = (item as UserScene).content || (item as AdminScene).defaultContent;
     if (currentContent && currentContent.trim() !== "") return currentContent;
 
+    // 3. Inheritance logic for shared slots
     const adminScene = activeTemplate?.scenes[idx];
-    if (adminScene?.aeLayerName && activeProject) {
-      const representative = activeProject.userScenes.find(s => {
-        const sAdmin = activeTemplate?.scenes.find(as => as.id === s.id);
-        return sAdmin?.aeLayerName === adminScene.aeLayerName && s.content && s.content.trim() !== "";
-      });
-      if (representative) return representative.content;
+    if (activeProject) {
+      const targetSlotId = slotId || adminScene?.slots?.texts?.[0]?.id;
+      if (targetSlotId) {
+        const representative = activeProject.userScenes.find(s => {
+          return s.slotTexts?.[targetSlotId] && s.slotTexts[targetSlotId].trim() !== "";
+        });
+        if (representative && representative.slotTexts) return representative.slotTexts[targetSlotId];
+      }
+
+      // Legacy AE Layer Name inheritance
+      if (adminScene?.aeLayerName) {
+        const representative = activeProject.userScenes.find(s => {
+          const sAdmin = activeTemplate?.scenes.find(as => as.id === s.id);
+          return sAdmin?.aeLayerName === adminScene.aeLayerName && s.content && s.content.trim() !== "";
+        });
+        if (representative) return representative.content;
+      }
     }
     return "";
   };
+
 
   // [명예 회복] 템플릿 삭제 및 연쇄 삭제 로직
   const handleDeleteTemplate = async (id: string) => {

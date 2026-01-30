@@ -43,15 +43,30 @@ export interface BaseScene {
   height?: number;
 }
 
+export interface Slot {
+  id: string;
+  name: string;
+  isEditable: boolean;
+}
+
+export interface SceneSlots {
+  photos: Slot[];
+  texts: Slot[];
+}
+
+
 // 관리자가 설정하는 장면 (가이드용)
 export interface AdminScene extends BaseScene {
   overlayUrl?: string;
   defaultContent: string;
   aeLayerName?: string;        // AE 레이어 이름 (렌더링 매핑용)
-  allowUserUpload?: boolean;   // 사진 업로드 허용 여부
+  allowUserUpload?: boolean;   // 사진 업로드 허용 여부 (Legacy)
   allowUserDecorate?: boolean; // 꾸미기(스티커/그리기) 허용 여부
-  allowUserText?: boolean;     // 문구 작성 허용 여부
+  allowUserText?: boolean;     // 문구 작성 허용 여부 (Legacy)
+  slots?: SceneSlots;         // 재귀적 검색으로 찾은 상세 슬롯 정보 ⭐
+  previewFrame?: number;       // 프리뷰 기준 프레임 (대부분 0)
 }
+
 
 // 템플릿 정보
 export interface Template {
@@ -68,7 +83,10 @@ export interface Template {
 export interface UserScene extends BaseScene {
   userImageUrl?: string;
   content: string;
+  slotImages?: Record<string, string>; // slotId -> url
+  slotTexts?: Record<string, string>;  // slotId -> text
 }
+
 
 export interface UserProject {
   id: string;
