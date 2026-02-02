@@ -20,46 +20,61 @@ interface Props {
 }
 
 /**
- * Helper: Extract single scene from full template JSON
+ * Helper: Find image layer recursively inside a composition tree
  */
-function extractSceneLottie(fullTemplate: any, sceneCompId: string): any {
-    if (!fullTemplate || !sceneCompId) return null;
-    const sceneComp = fullTemplate.assets?.find((a: any) => a.id === sceneCompId);
+function findImageLayer(compId: string, assets: any[]): any | null {
+    const comp = assets.find((a: any) => a.id === compId);
+    if (!comp || !comp.layers) return null;
+
+    // 1. Direct image layer check
+    const imgLayer = comp.layers.find((l: any) => l.ty === 2);
+    if (imgLayer) return imgLayer;
+
+    // 2. Recursive check for nested precomps
+    for (const layer of comp.layers) {
+        if (layer.ty === 0 && layer.refId) {
+            const found = findImageLayer(layer.refId, assets);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+/**
+ * Creates a Lottie JSON that only shows the specified scene
+ * but keeps ALL assets to ensure backgrounds/videos/images work.
+ */
+function prepareSceneLottie(fullTemplate: any, sceneId: string) {
+    if (!fullTemplate || !sceneId) return null;
+    const copy = JSON.parse(JSON.stringify(fullTemplate));
+
+    const sceneComp = copy.assets?.find((a: any) => a.id === sceneId);
     if (!sceneComp) return null;
 
-    const usedAssetIds = new Set<string>();
-    function collectAssets(layers: any[]) {
-        if (!layers) return;
-        layers.forEach(layer => {
-            if (layer.refId) usedAssetIds.add(layer.refId);
-            if (layer.layers) collectAssets(layer.layers);
-        });
-    }
-    collectAssets(sceneComp.layers || []);
-
-    let prevSize = 0;
-    while (usedAssetIds.size > prevSize) {
-        prevSize = usedAssetIds.size;
-        Array.from(usedAssetIds).forEach(id => {
-            const asset = fullTemplate.assets?.find((a: any) => a.id === id);
-            if (asset && asset.layers) collectAssets(asset.layers);
-        });
-    }
-
-    const sceneAssets = fullTemplate.assets?.filter((a: any) => usedAssetIds.has(a.id)) || [];
-
-    return {
-        v: fullTemplate.v,
-        fr: fullTemplate.fr,
-        ip: 0,
-        op: (sceneComp.op || 100) - (sceneComp.ip || 0),
-        w: sceneComp.w,
-        h: sceneComp.h,
-        nm: sceneComp.nm,
+    // Replace root layers with a single layer that references our scene composition
+    copy.layers = [{
         ddd: 0,
-        assets: sceneAssets,
-        layers: sceneComp.layers || []
-    };
+        ind: 1,
+        ty: 0, // Precomp
+        nm: "SCENE_ROOT",
+        refId: sceneId,
+        ks: {
+            o: { a: 0, k: 100 },
+            r: { a: 0, k: 0 },
+            p: { a: 0, k: [sceneComp.w / 2, sceneComp.h / 2] },
+            a: { a: 0, k: [sceneComp.w / 2, sceneComp.h / 2] },
+            s: { a: 0, k: [100, 100] }
+        },
+        ip: 0,
+        op: 9999,
+        st: 0
+    }];
+
+    // Scale root to match scene size if different from global
+    copy.w = sceneComp.w;
+    copy.h = sceneComp.h;
+
+    return copy;
 }
 
 /**
@@ -74,25 +89,22 @@ function injectContent(
     backgroundColor?: string
 ) {
     if (!lottieJson) return null;
-    const copy = JSON.parse(JSON.stringify(lottieJson));
+    const copy = lottieJson;
 
     if (!slots) return copy;
 
-    // 1. Photo replacement
+    // 1. Photo replacement (Recursive search)
     slots.photos?.forEach(photoSlot => {
         const imageUrl = userImages[photoSlot.id];
-        if (!imageUrl) return;
+        if (!imageUrl) return; // Keep default image if not uploaded
 
-        const photoComp = copy.assets.find((a: any) => a.id === photoSlot.id);
-        if (!photoComp || !photoComp.layers) return;
-
-        const imgLayer = photoComp.layers.find((l: any) => l.ty === 2);
-        if (!imgLayer || !imgLayer.refId) return;
-
-        const imgAsset = copy.assets.find((a: any) => a.id === imgLayer.refId);
-        if (imgAsset) {
-            imgAsset.u = '';
-            imgAsset.p = imageUrl;
+        const imgLayer = findImageLayer(photoSlot.id, copy.assets);
+        if (imgLayer && imgLayer.refId) {
+            const imgAsset = copy.assets.find((a: any) => a.id === imgLayer.refId);
+            if (imgAsset) {
+                imgAsset.u = '';
+                imgAsset.p = imageUrl;
+            }
         }
     });
 
@@ -112,66 +124,48 @@ function injectContent(
     });
 
     // 3. Background injection
-    if (copy.assets && (backgroundColor || backgroundMode === 'blur')) {
-        // 이미 주입된 배경이 있는지 확인 (중복 방지 - nm 속성 관례)
-        if (!copy.layers.find((l: any) => l.nm === '___MOMCAST_BG___')) {
-            const bgLayer: any = {
-                nm: '___MOMCAST_BG___',
-                ty: 1, // Solid
-                sw: copy.w,
-                sh: copy.h,
-                sc: backgroundColor || '#ffffff',
-                ks: {
-                    o: { a: 0, k: 100 },
-                    r: { a: 0, k: 0 },
-                    p: { a: 0, k: [copy.w / 2, copy.h / 2] },
-                    a: { a: 0, k: [copy.w / 2, copy.h / 2] },
-                    s: { a: 0, k: [100, 100] }
-                },
-                ip: 0,
-                op: 9999,
-                st: 0,
-                bm: 0
-            };
+    if (backgroundMode === 'solid' || backgroundMode === 'blur') {
+        const bgLayer: any = {
+            nm: '___MOMCAST_BG___',
+            ty: 1, // Solid
+            sw: copy.w,
+            sh: copy.h,
+            sc: backgroundColor || '#ffffff',
+            ks: {
+                o: { a: 0, k: 100 },
+                r: { a: 0, k: 0 },
+                p: { a: 0, k: [copy.w / 2, copy.h / 2] },
+                a: { a: 0, k: [copy.w / 2, copy.h / 2] },
+                s: { a: 0, k: [100, 100] }
+            },
+            ip: 0,
+            op: 9999,
+            st: 0,
+            bm: 0
+        };
 
-            if (backgroundMode === 'blur') {
-                // 블러 모드: 첫 번째 이미지 슬롯을 배경 이미지로 재활용
-                const firstPhoto = slots.photos?.[0];
-                const firstImgUrl = firstPhoto ? userImages[firstPhoto.id] : null;
+        if (backgroundMode === 'blur') {
+            const firstPhotoId = slots.photos?.[0]?.id;
+            const firstImgUrl = firstPhotoId ? userImages[firstPhotoId] : null;
 
-                if (firstImgUrl) {
-                    bgLayer.ty = 2; // Image layer
-                    const blurAssetId = 'asset_blur_bg';
-                    // 에셋 리스트에 블러용 이미지 원본 등록
-                    if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
-                        copy.assets.push({
-                            id: blurAssetId,
-                            w: copy.w,
-                            h: copy.h,
-                            u: '',
-                            p: firstImgUrl,
-                            e: 0
-                        });
-                    }
-                    bgLayer.refId = blurAssetId;
-
-                    // 가우시안 블러 효과 주입
-                    bgLayer.ef = [{
-                        ty: 29, // Gaussian Blur
-                        nm: '가우시안 흐림',
-                        mn: 'ADBE Gaussian Blur 2',
-                        en: 1,
-                        ef: [
-                            { ty: 0, nm: '흐림', mn: 'ADBE Gaussian Blur 2-0001', v: { a: 0, k: 60 } },
-                            { ty: 7, nm: '흐림 차원', mn: 'ADBE Gaussian Blur 2-0002', v: { a: 0, k: 1 } }
-                        ]
-                    }];
+            if (firstImgUrl) {
+                bgLayer.ty = 2; // Image
+                const blurAssetId = 'asset_blur_bg';
+                if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
+                    copy.assets.push({ id: blurAssetId, w: copy.w, h: copy.h, u: '', p: firstImgUrl, e: 0 });
                 }
+                bgLayer.refId = blurAssetId;
+                bgLayer.ef = [{
+                    ty: 29, nm: 'Blur', mn: 'ADBE Gaussian Blur 2', en: 1,
+                    ef: [{ ty: 0, nm: 'Blur', mn: 'ADBE Gaussian Blur 2-0001', v: { a: 0, k: 60 } }]
+                }];
             }
-
-            // 레이어 배열의 마지막에 추가하여 가장 아래 렌더링되게 함
-            copy.layers.push(bgLayer);
         }
+
+        // Bodymovin SVG renderer order: elements are drawn in the order they appear in the array.
+        // So index 0 is at the BACK, and higher indices are on top.
+        // unshift puts the background layer at index 0, so it's drawn behind everything.
+        copy.layers.unshift(bgLayer);
     }
 
     return copy;
@@ -196,9 +190,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
     // 1. Process Lottie JSON (memoized)
     const processedJson = useMemo(() => {
-        const extracted = extractSceneLottie(fullTemplate, sceneId);
-        if (!extracted) return null;
-        return injectContent(extracted, slots, userImages, userTexts, backgroundMode, backgroundColor);
+        const prepared = prepareSceneLottie(fullTemplate, sceneId);
+        if (!prepared) return null;
+        return injectContent(prepared, slots, userImages, userTexts, backgroundMode, backgroundColor);
     }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
 
     // 2. Load Animation
@@ -221,10 +215,14 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             animRef.current = anim;
 
             anim.addEventListener('DOMLoaded', () => {
-                // Go to specific frame after DOM is ready
+                // Initial frame set
                 anim.goToAndStop(previewFrame, true);
 
-                // Ensure all images are covered properly
+                // Extra safety for 0 frame
+                setTimeout(() => {
+                    if (animRef.current) animRef.current.goToAndStop(previewFrame, true);
+                }, 50);
+
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) {
                     svg.querySelectorAll('image').forEach(img => {
