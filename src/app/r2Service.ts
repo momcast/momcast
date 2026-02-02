@@ -1,33 +1,7 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-
-// R2 환경 변수 (나중에 .env 파일에서 설정)
-const R2_ACCOUNT_ID = process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID;
-const R2_ACCESS_KEY = process.env.NEXT_PUBLIC_VITE_R2_ACCESS_KEY;
-const R2_SECRET_KEY = process.env.NEXT_PUBLIC_VITE_R2_SECRET_KEY;
-const R2_BUCKET = process.env.NEXT_PUBLIC_VITE_R2_BUCKET || "momcast-photos";
-const R2_PUBLIC_URL = process.env.NEXT_PUBLIC_VITE_R2_PUBLIC_URL; // 예: https://pub-xxxxx.r2.dev
-
-// S3 호환 클라이언트 초기화
-let s3Client: S3Client | null = null;
-
-const initR2Client = () => {
-    if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY || !R2_SECRET_KEY) {
-        console.warn("⚠️ R2 credentials not configured. Image upload will use fallback (base64).");
-        return null;
-    }
-
-    if (!s3Client) {
-        s3Client = new S3Client({
-            region: "auto",
-            endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-            credentials: {
-                accessKeyId: R2_ACCESS_KEY,
-                secretAccessKey: R2_SECRET_KEY,
-            },
-        });
-    }
-    return s3Client;
-};
+/**
+ * R2 Service (Server-Proxy Version)
+ * 클라이언트 사이드 S3 SDK를 제거하여 CORS 문제를 원천 방어합니다.
+ */
 
 /**
  * R2에 이미지 업로드 (Server Proxy 사용으로 CORS 우회)
@@ -36,9 +10,13 @@ export const uploadImageToR2 = async (
     file: Blob,
     fileName?: string
 ): Promise<string> => {
+    console.log("[R2Service] Attempting upload via Server Proxy API...");
+
     try {
         const formData = new FormData();
-        formData.append('file', file, fileName || 'image.png');
+        // File 객체가 아닌 Blob일 경우 이름을 수동 지정
+        const fileToUpload = file instanceof File ? file : new File([file], fileName || 'image.png', { type: file.type });
+        formData.append('file', fileToUpload);
 
         const response = await fetch('/api/upload/r2', {
             method: 'POST',
@@ -46,19 +24,25 @@ export const uploadImageToR2 = async (
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Upload failed');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server responded with ${response.status}`);
         }
 
         const data = await response.json();
-        console.log("✅ Image uploaded via API:", data.url);
+        console.log("✅ Image uploaded via API Success:", data.url);
         return data.url;
 
-    } catch (error) {
-        console.error("❌ R2 API upload failed, using base64 fallback:", error);
+    } catch (error: any) {
+        console.error("❌ R2 API upload failed, switching to local Base64 fallback:", error);
+
+        // 업로드 실패 시 로컬에서 즉시 사용할 수 있도록 Base64로 전환
         return new Promise((resolve) => {
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
+            reader.onloadend = () => {
+                const b64 = reader.result as string;
+                console.log("🔄 Fallback: Base64 generated successfully.");
+                resolve(b64);
+            };
             reader.readAsDataURL(file);
         });
     }

@@ -8,8 +8,8 @@ interface Props {
     fullTemplate: any;
     sceneId: string;
     slots?: SceneSlots;
-    userImages?: Record<string, string>; // compId -> imageURL
-    userTexts?: Record<string, string>;  // compId -> textContent
+    userImages?: Record<string, string>;
+    userTexts?: Record<string, string>;
     width?: number;
     height?: number;
     previewFrame?: number;
@@ -19,24 +19,15 @@ interface Props {
     backgroundColor?: string;
 }
 
-/**
- * PATH NORMALIZER: Ensures assets are loaded correctly.
- * Absolute URLs and DataURLs are preserved.
- */
 function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
-    // Strip prefixes like 'images/' or 'te-images/' and point to our public flat folder
     const filename = p.split('/').pop() || p;
     return `/templates/images/${filename}`;
 }
 
-/**
- * HYPER-PRUNING v4: Surgical Json Extraction
- */
 function hyperPrune(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
-
     const allAssets = template.assets || [];
     const usedAssetIds = new Set<string>();
 
@@ -52,18 +43,14 @@ function hyperPrune(template: any, sceneId: string) {
         }
     };
 
-    // Find the scene comp
     const sceneComp = allAssets.find((a: any) => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
     if (!sceneComp) return null;
-
     collectRecursive(sceneComp.id);
 
-    // Build lean JSON
     const prunedAssets = allAssets
         .filter((a: any) => usedAssetIds.has(a.id))
         .map((a: any) => {
             if (a.layers) {
-                // Filter glitchy layers even in nested assets
                 const subLayers = a.layers.map((l: any) => {
                     const nm = (l.nm || "").toLowerCase();
                     if (nm.includes('transition') || nm.includes('wipe')) return { ...l, hd: true };
@@ -71,7 +58,6 @@ function hyperPrune(template: any, sceneId: string) {
                 });
                 return { ...a, layers: subLayers };
             }
-            // For images, fix path and clear relative dir
             if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
             return a;
         });
@@ -95,7 +81,6 @@ function hyperPrune(template: any, sceneId: string) {
 
 function applyContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
     if (!json || !slots) return json;
-
     const replaceImage = (compId: string, url: string) => {
         const asset = json.assets.find((a: any) => a.id === compId);
         if (!asset || !asset.layers) return;
@@ -108,12 +93,10 @@ function applyContent(json: any, slots: SceneSlots | undefined, userImages: Reco
             }
         });
     };
-
     slots.photos?.forEach(slot => {
         const url = userImages[slot.id];
         if (url) replaceImage(slot.id, url);
     });
-
     slots.texts?.forEach(slot => {
         const text = userTexts[slot.id];
         if (text === undefined) return;
@@ -124,7 +107,6 @@ function applyContent(json: any, slots: SceneSlots | undefined, userImages: Reco
             });
         }
     });
-
     return json;
 }
 
@@ -139,53 +121,75 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const [isInView, setIsInView] = useState(false);
     const [readyToRender, setReadyToRender] = useState(false);
 
-    // 1. Intersection Observer
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) {
                 setIsInView(true);
-                // Extra debounce to avoid jank during fast scroll
-                setTimeout(() => setReadyToRender(true), 150);
+                // Reduced debounce for responsiveness
+                const timer = setTimeout(() => setReadyToRender(true), 100);
+                return () => clearTimeout(timer);
             }
-        }, { threshold: 0.01, rootMargin: '300px' });
+        }, { threshold: 0.01, rootMargin: '400px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
-    // 2. Optimized JSON Generation
     const processedJson = useMemo(() => {
         if (!readyToRender) return null;
-        const pruned = hyperPrune(fullTemplate, sceneId);
-        if (!pruned) return null;
-        return applyContent(pruned, slots, userImages, userTexts);
+        try {
+            const pruned = hyperPrune(fullTemplate, sceneId);
+            if (!pruned) return null;
+            return applyContent(pruned, slots, userImages, userTexts);
+        } catch (e) {
+            console.error(`[LottiePreview] Pruning Error:`, e);
+            return null;
+        }
     }, [fullTemplate, sceneId, slots, userImages, userTexts, readyToRender]);
 
-    // 3. Lottie Core
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
 
+        let instance: AnimationItem | null = null;
+
         try {
-            if (animRef.current) animRef.current.destroy();
-            const anim = lottie.loadAnimation({
+            // Aggressive Cleanup
+            if (animRef.current) {
+                try { animRef.current.destroy(); } catch (e) { }
+                animRef.current = null;
+            }
+
+            instance = lottie.loadAnimation({
                 container: containerRef.current,
                 renderer: 'svg',
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
-                rendererSettings: { progressiveLoad: true, hideOnTransparent: true }
+                rendererSettings: {
+                    progressiveLoad: false, // CRITICAL: Fix for destroy() crash
+                    hideOnTransparent: true
+                }
             });
-            animRef.current = anim;
-            anim.addEventListener('DOMLoaded', () => {
-                anim.goToAndStop(previewFrame, true);
-                setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(previewFrame, true); }, 50);
+            animRef.current = instance;
+
+            instance.addEventListener('DOMLoaded', () => {
+                if (!instance) return;
+                instance.goToAndStop(previewFrame, true);
+                setTimeout(() => { if (instance) instance.goToAndStop(previewFrame, true); }, 50);
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
             console.error(`Render Error [${sceneId}]:`, e);
         }
-        return () => { if (animRef.current) animRef.current.destroy(); animRef.current = null; };
+
+        return () => {
+            if (instance) {
+                try { instance.destroy(); } catch (e) { }
+                if (animRef.current === instance) animRef.current = null;
+                instance = null;
+            }
+        };
     }, [processedJson, previewFrame, sceneId]);
 
     const dW = processedJson?.w || fullTemplate?.w || width || 1920;
@@ -207,7 +211,6 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 }}
             >
                 {!readyToRender && <div className="absolute inset-0 bg-gray-50/5" />}
-                {readyToRender && !processedJson && <div className="text-[10px] text-gray-300">Loading...</div>}
             </div>
         </div>
     );
