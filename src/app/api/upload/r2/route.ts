@@ -19,7 +19,13 @@ const s3Client = new S3Client({
 
 export async function POST(req: NextRequest) {
     try {
+        console.log("[R2-API] Upload started...");
         if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY || !R2_SECRET_KEY) {
+            console.error("[R2-API] Missing credentials:", {
+                ID: !!R2_ACCOUNT_ID,
+                AK: !!R2_ACCESS_KEY,
+                SK: !!R2_SECRET_KEY
+            });
             return NextResponse.json({ error: "R2 credentials not configured" }, { status: 500 });
         }
 
@@ -35,6 +41,7 @@ export async function POST(req: NextRequest) {
         const extension = file.name.split('.').pop() || 'png';
         const key = `uploads/${timestamp}_${randomStr}.${extension}`;
 
+        console.log(`[R2-API] Sending to R2 (Key: ${key})...`);
         await s3Client.send(
             new PutObjectCommand({
                 Bucket: R2_BUCKET,
@@ -48,10 +55,20 @@ export async function POST(req: NextRequest) {
             ? `${R2_PUBLIC_URL}/${key}`
             : `https://pub-${R2_ACCOUNT_ID}.r2.dev/${key}`;
 
+        console.log("[R2-API] Upload Success:", publicUrl);
         return NextResponse.json({ url: publicUrl });
 
     } catch (error: any) {
-        console.error("R2 Server Upload Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("[R2-API] Critical Error:", {
+            message: error.message,
+            code: error.code,
+            requestId: error.$metadata?.requestId,
+            statusCode: error.$metadata?.httpStatusCode
+        });
+        return NextResponse.json({
+            error: error.message,
+            code: error.code,
+            details: error.$metadata
+        }, { status: 500 });
     }
 }

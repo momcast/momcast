@@ -19,13 +19,20 @@ interface Props {
     backgroundColor?: string;
 }
 
+/**
+ * PATH NORMALIZER: Ensures assets are loaded correctly.
+ */
 function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
+    // Strip prefixes like 'te-images/' and point to our public flat folder
     const filename = p.split('/').pop() || p;
     return `/templates/images/${filename}`;
 }
 
+/**
+ * HYPER-PRUNING v5: Balanced extraction for reliability.
+ */
 function hyperPrune(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const allAssets = template.assets || [];
@@ -44,20 +51,16 @@ function hyperPrune(template: any, sceneId: string) {
     };
 
     const sceneComp = allAssets.find((a: any) => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
-    if (!sceneComp) return null;
+    if (!sceneComp) {
+        console.warn(`[LottiePreview] Scene asset ${sceneId} not found.`);
+        return null;
+    }
     collectRecursive(sceneComp.id);
 
+    // Build optimized assets with corrected paths
     const prunedAssets = allAssets
         .filter((a: any) => usedAssetIds.has(a.id))
         .map((a: any) => {
-            if (a.layers) {
-                const subLayers = a.layers.map((l: any) => {
-                    const nm = (l.nm || "").toLowerCase();
-                    if (nm.includes('transition') || nm.includes('wipe')) return { ...l, hd: true };
-                    return l;
-                });
-                return { ...a, layers: subLayers };
-            }
             if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
             return a;
         });
@@ -71,11 +74,7 @@ function hyperPrune(template: any, sceneId: string) {
         h: sceneComp.h || template.h,
         nm: `Hyper_${sceneId}`,
         assets: prunedAssets,
-        layers: sceneComp.layers.map((l: any) => {
-            const nm = (l.nm || "").toLowerCase();
-            if (nm.includes('transition') || nm.includes('wipe')) return { ...l, hd: true };
-            return l;
-        })
+        layers: sceneComp.layers // No aggressive hiding for now to restore background
     };
 }
 
@@ -119,41 +118,29 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
-    const [readyToRender, setReadyToRender] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) {
-                setIsInView(true);
-                // Reduced debounce for responsiveness
-                const timer = setTimeout(() => setReadyToRender(true), 100);
-                return () => clearTimeout(timer);
-            }
-        }, { threshold: 0.01, rootMargin: '400px' });
+            if (entry.isIntersecting) setIsInView(true);
+        }, { threshold: 0.01, rootMargin: '300px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
     const processedJson = useMemo(() => {
-        if (!readyToRender) return null;
-        try {
-            const pruned = hyperPrune(fullTemplate, sceneId);
-            if (!pruned) return null;
-            return applyContent(pruned, slots, userImages, userTexts);
-        } catch (e) {
-            console.error(`[LottiePreview] Pruning Error:`, e);
-            return null;
-        }
-    }, [fullTemplate, sceneId, slots, userImages, userTexts, readyToRender]);
+        if (!isInView) return null;
+        const pruned = hyperPrune(fullTemplate, sceneId);
+        if (!pruned) return null;
+        return applyContent(pruned, slots, userImages, userTexts);
+    }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
 
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
 
         let instance: AnimationItem | null = null;
-
         try {
-            // Aggressive Cleanup
             if (animRef.current) {
                 try { animRef.current.destroy(); } catch (e) { }
                 animRef.current = null;
@@ -165,22 +152,20 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
-                rendererSettings: {
-                    progressiveLoad: false, // CRITICAL: Fix for destroy() crash
-                    hideOnTransparent: true
-                }
+                rendererSettings: { progressiveLoad: false }
             });
             animRef.current = instance;
 
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
                 instance.goToAndStop(previewFrame, true);
-                setTimeout(() => { if (instance) instance.goToAndStop(previewFrame, true); }, 50);
+                setIsLoaded(true);
+                // Ensure image scaling
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error(`Render Error [${sceneId}]:`, e);
+            console.error(`[LottiePreview] Render Error [${sceneId}]:`, e);
         }
 
         return () => {
@@ -197,7 +182,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const isV = dH > dW;
 
     return (
-        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
+        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`} style={{ backgroundColor }}>
             <div
                 ref={containerRef}
                 className="relative"
@@ -206,11 +191,14 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     height: isV ? '100%' : 'auto',
                     aspectRatio: `${dW} / ${dH}`,
                     maxWidth: '100%',
-                    maxHeight: '100%',
-                    backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
+                    maxHeight: '100%'
                 }}
             >
-                {!readyToRender && <div className="absolute inset-0 bg-gray-50/5" />}
+                {!isLoaded && isInView && (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-mono">
+                        RENDERING...
+                    </div>
+                )}
             </div>
         </div>
     );
