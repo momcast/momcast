@@ -707,12 +707,12 @@ const SceneEditor: React.FC<{
 
         {/* 3. Main Stage (Preview) */}
         <div
-          className="flex-1 bg-white relative flex items-center justify-center p-4 md:p-8 overflow-hidden"
+          className="flex-1 relative flex items-center justify-center p-4 md:p-8 overflow-hidden"
           style={transparencyGridStyle}
         >
           <div
             ref={viewportRef}
-            className={`w-full max-w-2xl relative overflow-hidden bg-white shadow-2xl rounded-xl transition-transform duration-500`}
+            className={`w-full max-w-2xl relative overflow-hidden bg-transparent shadow-2xl rounded-xl transition-transform duration-500`}
             style={{
               aspectRatio: `${width || 1920} / ${height || 1080}`,
               boxShadow: '0 30px 60px -12px rgba(50,50,93,0.1), 0 18px 36px -18px rgba(0,0,0,0.15)'
