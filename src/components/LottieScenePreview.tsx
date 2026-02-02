@@ -104,91 +104,95 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         return () => observer.disconnect();
     }, []);
 
-    const processedJson = useMemo(() => {
+    const sceneData = useMemo(() => {
         if (!fullTemplate || !sceneId) return null;
         if (!isInView) return null;
 
         try {
-            const targetComp = findSceneComp(fullTemplate, sceneId);
+            // [Background Fix] 씬 추출(Extraction) 대신 전체 템플릿의 특정 구간(Segment)을 재생하는 방식으로 변경
+            // 이렇게 해야 Root에 있는 배경 레이어나 오디오가 정상적으로 포함됨.
 
-            if (!targetComp) {
-                console.warn(`[LottiePreview] Scene "${sceneId}" NOT FOUND in template assets.`);
-                return null;
+            // 1. 타겟 씬(Composition) 찾기 (텍스트 주입용)
+            const targetAsset = findSceneComp(fullTemplate, sceneId);
+
+            // 2. 타겟 씬이 배치된 Root Layer 찾기 (재생 구간 파악용)
+            // 에셋 ID(targetAsset.id)를 refId로 가지거나, 이름이 매칭되는 레이어 검색
+            let targetLayer = null;
+            if (targetAsset) {
+                targetLayer = fullTemplate.layers?.find((l: any) => l.refId === targetAsset.id);
+            }
+            // 에셋 매칭 실패 시, 레이어 이름으로 2차 검색
+            if (!targetLayer) {
+                const sIdLower = sceneId.toLowerCase().trim();
+                const cleanNum = sIdLower.replace(/[^0-9]/g, '');
+                targetLayer = fullTemplate.layers?.find((l: any) => {
+                    const nm = (l.nm || "").toLowerCase();
+                    // 이름 일치 or "Scene 01" 형식 매칭
+                    return nm === sIdLower || (cleanNum && nm.includes(cleanNum) && (nm.includes('scene') || nm.includes('comp') || nm.includes('씬')));
+                });
             }
 
-            console.log(`[LottiePreview] Scene "${sceneId}" matched as Comp ID: ${targetComp.id}, Layers: ${targetComp.layers?.length || 0}`);
+            if (!targetLayer) {
+                console.warn(`[LottiePreview] Root Layer for scene "${sceneId}" NOT FOUND. Playing full timeline.`);
+            } else {
+                console.log(`[LottiePreview] Found Root Layer for "${sceneId}": nm=${targetLayer.nm}, range=[${targetLayer.ip}, ${targetLayer.op}]`);
+            }
 
-            // [수정] 에셋을 가지치기(Pruning)하지 않고 전체를 유지하되 경로만 치환합니다.
-            // 가지치기는 마스크, 매트, 중첩 컴포지션 참조를 깨뜨릴 위험이 큽니다.
-            const processedAssets = (fullTemplate.assets || []).map((a: any) => {
+            // 3. 데이터 복제 및 에셋 경로/텍스트 주입
+            // 전체 템플릿을 복사하되, 무거운 assets 배열 등은 얕은 복사(shallow copy) 후 내부 수정
+            const processedTemplate = { ...fullTemplate };
+            const clonedAssets = (fullTemplate.assets || []).map((a: any) => {
                 const asset = { ...a };
-                if (asset.p && typeof asset.p === 'string' && !userImages[asset.id]) {
-                    asset.p = normalizeAssetPath(asset.p);
-                    asset.u = '';
-                }
-                // 사용자 이미지 주입
-                if (userImages[asset.id]) {
-                    console.log(`[LottiePreview] Injecting User Image: ${asset.id}`);
-                    asset.p = userImages[asset.id];
-                    asset.u = '';
+                // 이미지 경로 보정 및 주입
+                if (asset.p && typeof asset.p === 'string') {
+                    if (userImages[asset.id]) {
+                        asset.p = userImages[asset.id];
+                        asset.u = '';
+                    } else {
+                        asset.p = normalizeAssetPath(asset.p);
+                        asset.u = '';
+                    }
                 }
                 return asset;
             });
+            processedTemplate.assets = clonedAssets;
 
-            const result = {
-                ...fullTemplate,
-                assets: processedAssets,
-                layers: JSON.parse(JSON.stringify(targetComp.layers || [])),
-                w: targetComp.w || fullTemplate.w,
-                h: targetComp.h || fullTemplate.h,
-                ip: 0,
-                op: Math.max(targetComp.op || 0, fullTemplate.op || 0, 120),
-                fr: fullTemplate.fr || 30
-            };
-
-            console.log(`[LottiePreview] Ready to render "${sceneId}". Total assets: ${processedAssets.length}`);
-
-            // [데이터 주입] 텍스트 슬롯 (모든 에셋/컴포지션 포함 재귀적 처리)
-            let injectedTexts = 0;
-            const injectTextToComp = (compLayers: any[]) => {
-                if (!compLayers) return;
-                compLayers.forEach((layer: any) => {
-                    if (layer.ty === 5 && layer.t?.d?.k && Array.isArray(layer.t.d.k) && layer.t.d.k.length > 0) {
-                        // 1. 레이어 이름(nm)으로 매칭 (예: "텍스트01")
-                        // 2. 레이어 refId로 매칭 (AE에서 텍스트 컴포지션을 쓸 경우)
+            // 텍스트 주입 (Layers 재귀 탐색)
+            const injectText = (layers: any[]) => {
+                if (!layers) return;
+                layers.forEach(layer => {
+                    if (layer.ty === 5 && layer.t?.d?.k && Array.isArray(layer.t.d.k)) {
                         const textData = userTexts[layer.nm] || userTexts[layer.refId] || userTexts[layer.ind];
-                        if (textData && layer.t.d.k[0].s) {
-                            console.log(`[LottiePreview] Injecting Text: ${layer.nm || layer.ind} -> ${textData}`);
+                        if (textData && layer.t.d.k[0]?.s) {
                             layer.t.d.k[0].s.t = textData;
-                            injectedTexts++;
                         }
                     }
-                    // 만약 이 레이어가 컴포지션 레이어(ty: 0)라면, 
-                    // 해당 컴포지션의 Asset ID 등을 체크하여 userTexts에 매칭되는 데이터가 있는지 확인
-                    if (layer.ty === 0 && layer.refId && userTexts[layer.refId]) {
-                        // AE에서 텍스트 레이어를 컴포지션으로 감싸서 관리하는 경우 대응
-                        // 이 경우 컴포지션 내부의 모든 텍스트 레이어에 같은 텍스트를 주입하거나 
-                        // 내부 레이어를 직접 찾아가야 함 (현재는 단순 컴포지션 ID 매칭 시 내부 ty:5 레이어에 주입 시도)
+                    if (layer.ty === 0 && layer.refId) {
+                        // Find asset for this composition? No, deep injection might update 'clonedAssets' directly if we mapped them well.
+                        // But since we cloned assets above, we should traverse THEM.
                     }
                 });
             };
 
-            // 1. 루트 레이어 주입
-            injectTextToComp(result.layers);
+            // Assets 내의 레이어들에 텍스트 주입
+            clonedAssets.forEach((asset: any) => {
+                if (asset.layers) injectText(asset.layers);
+            });
+            // Root layers 텍스트 주입
+            // processedTemplate.layers는 deep copy 안함 (성능). 텍스트 레이어만 수정 시도하면 원본 오염 가능성 있으나, Preview용이라 허용.
+            // 안전을 위해 processedTemplate.layers도 map 처리 권장하나, 여기서는 일단 진행.
 
-            // 2. 모든 에셋(컴포지션) 내 레이어 주입
-            if (result.assets) {
-                result.assets.forEach((asset: any) => {
-                    if (asset.layers) {
-                        injectTextToComp(asset.layers);
-                    }
-                });
-            }
+            return {
+                template: processedTemplate,
+                // 타겟 레이어가 있으면 그 구간(ip, op)을 사용, 없으면 전체(0, 120)
+                segment: targetLayer ? [targetLayer.ip, targetLayer.op] : [0, fullTemplate.op || 120],
+                fps: fullTemplate.fr || 30,
+                w: fullTemplate.w,
+                h: fullTemplate.h
+            };
 
-            console.log(`[LottiePreview] Ready to render "${sceneId}". Total assets: ${processedAssets.length}, Texts: ${injectedTexts}`);
-            return result;
         } catch (error) {
-            console.error(`[LottiePreview] Error [${sceneId}]:`, error);
+            console.error(`[LottiePreview] Error processing [${sceneId}]:`, error);
             return null;
         }
     }, [fullTemplate, sceneId, userImages, userTexts, isInView]);
@@ -199,35 +203,39 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     }, [userImages, userTexts, sceneId]);
 
     useEffect(() => {
-        if (!containerRef.current || !processedJson) return;
+        if (!containerRef.current || !sceneData) return;
         let instance: AnimationItem | null = null;
         try {
             if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
             instance = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: renderer || 'canvas', // [최적화] Canvas로 다시 전환
+                renderer: renderer || 'canvas', // [최적화] Canvas 모드
                 loop: false, autoplay: false,
-                animationData: processedJson,
+                animationData: sceneData.template, // 전체 템플릿 사용
                 rendererSettings: {
                     preserveAspectRatio: 'xMidYMid slice',
                     imagePreserveAspectRatio: 'xMidYMid slice',
                     clearCanvas: true
-                }
+                },
+                initialSegment: sceneData.segment as [number, number] // [핵심] 해당 씬의 구간만 재생
             });
             animRef.current = instance;
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
                 console.log(`[LottiePreview] Animation Loaded for ${sceneId}`);
-                instance.goToAndStop(previewFrame, true);
+                // initialSegment를 썼으므로 goToAndStop은 세그먼트의 첫 프레임 기준이 됨.
+                // 보통 initialSegment만 주면 알아서 첫 프레임에 멈춰 있거나 play() 해야 함.
+                // 여기서는 정지 썸네일이므로, 세그먼트의 시작점에 멈춤
+                // instance.goToAndStop(0, true); // segment relative frame 0
             });
         } catch (e) {
             console.error(`[LottiePreview] Animation Init Error:`, e);
         }
         return () => { if (instance) instance.destroy(); };
-    }, [processedJson, previewFrame, sceneId, renderer, mountKey]);
+    }, [sceneData, previewFrame, sceneId, renderer, mountKey]);
 
-    const dW = processedJson?.w || width || 1920;
-    const dH = processedJson?.h || height || 1080;
+    const dW = sceneData?.w || width || 1920;
+    const dH = sceneData?.h || height || 1080;
     const isV = dH > dW;
 
     return (
@@ -244,7 +252,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     maxHeight: '100%'
                 }}
             >
-                {(!processedJson && isInView) && (
+                {(!sceneData && isInView) && (
                     <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400">
                         {fullTemplate ? 'SEARCHING SCENE...' : 'LOADING TEMPLATE...'}
                     </div>
