@@ -51,6 +51,10 @@ function prepareSceneLottie(fullTemplate: any, sceneId: string) {
     const sceneComp = copy.assets?.find((a: any) => a.id === sceneId);
     if (!sceneComp) return null;
 
+    // SCENE_ROOT dimension setup - IMPORTANT: viewBox undefined error fix
+    const w = sceneComp.w || copy.w || 1920;
+    const h = sceneComp.h || copy.h || 1080;
+
     // Replace root layers with a single layer that references our scene composition
     copy.layers = [{
         ddd: 0,
@@ -61,20 +65,19 @@ function prepareSceneLottie(fullTemplate: any, sceneId: string) {
         ks: {
             o: { a: 0, k: 100 },
             r: { a: 0, k: 0 },
-            p: { a: 0, k: [sceneComp.w / 2, sceneComp.h / 2] },
-            a: { a: 0, k: [sceneComp.w / 2, sceneComp.h / 2] },
+            p: { a: 0, k: [w / 2, h / 2] },
+            a: { a: 0, k: [w / 2, h / 2] },
             s: { a: 0, k: [100, 100] }
         },
-        ip: 0,
-        op: 9999,
+        ip: sceneComp.ip || 0,
+        op: sceneComp.op || 300,
         st: 0
     }];
 
-    // Scale root to match scene size if different from global
-    copy.w = sceneComp.w;
-    copy.h = sceneComp.h;
+    copy.w = w;
+    copy.h = h;
 
-    return copy;
+    return { lottie: copy, sceneIp: sceneComp.ip || 0 };
 }
 
 /**
@@ -96,7 +99,7 @@ function injectContent(
     // 1. Photo replacement (Recursive search)
     slots.photos?.forEach(photoSlot => {
         const imageUrl = userImages[photoSlot.id];
-        if (!imageUrl) return; // Keep default image if not uploaded
+        if (!imageUrl) return;
 
         const imgLayer = findImageLayer(photoSlot.id, copy.assets);
         if (imgLayer && imgLayer.refId) {
@@ -139,7 +142,7 @@ function injectContent(
                 s: { a: 0, k: [100, 100] }
             },
             ip: 0,
-            op: 9999,
+            op: 10000,
             st: 0,
             bm: 0
         };
@@ -161,10 +164,6 @@ function injectContent(
                 }];
             }
         }
-
-        // Bodymovin SVG renderer order: elements are drawn in the order they appear in the array.
-        // So index 0 is at the BACK, and higher indices are on top.
-        // unshift puts the background layer at index 0, so it's drawn behind everything.
         copy.layers.unshift(bgLayer);
     }
 
@@ -189,10 +188,11 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const animRef = useRef<AnimationItem | null>(null);
 
     // 1. Process Lottie JSON (memoized)
-    const processedJson = useMemo(() => {
-        const prepared = prepareSceneLottie(fullTemplate, sceneId);
-        if (!prepared) return null;
-        return injectContent(prepared, slots, userImages, userTexts, backgroundMode, backgroundColor);
+    const { processedJson, sceneIp } = useMemo(() => {
+        const preparedResult = prepareSceneLottie(fullTemplate, sceneId);
+        if (!preparedResult) return { processedJson: null, sceneIp: 0 };
+        const injected = injectContent(preparedResult.lottie, slots, userImages, userTexts, backgroundMode, backgroundColor);
+        return { processedJson: injected, sceneIp: preparedResult.sceneIp };
     }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
 
     // 2. Load Animation
@@ -201,27 +201,31 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
         if (animRef.current) {
             animRef.current.destroy();
+            animRef.current = null;
         }
 
         try {
+            // Fix 404: Set assetsPath to /templates/ for generic templates
+            // In Production, it should be the URL where assets are stored.
             const anim = lottie.loadAnimation({
                 container: containerRef.current,
                 renderer: 'svg',
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
+                assetsPath: '/templates/images/' // Assuming all assets are in images/ subfolder
             });
 
             animRef.current = anim;
 
             anim.addEventListener('DOMLoaded', () => {
-                // Initial frame set
-                anim.goToAndStop(previewFrame, true);
+                // Correct frame calculation: scene composition start frame + offset
+                const targetFrame = sceneIp + previewFrame;
+                anim.goToAndStop(targetFrame, true);
 
-                // Extra safety for 0 frame
                 setTimeout(() => {
-                    if (animRef.current) animRef.current.goToAndStop(previewFrame, true);
-                }, 50);
+                    if (animRef.current) animRef.current.goToAndStop(targetFrame, true);
+                }, 100);
 
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) {
@@ -237,10 +241,13 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
         return () => {
             animRef.current?.destroy();
+            animRef.current = null;
         };
-    }, [processedJson, previewFrame]);
+    }, [processedJson, previewFrame, sceneIp]);
 
-    const isVertical = height > width;
+    const displayW = width || 1920;
+    const displayH = height || 1080;
+    const isVertical = displayH > displayW;
 
     return (
         <div
@@ -256,7 +263,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     style={{
                         width: isVertical ? 'auto' : '100%',
                         height: isVertical ? '100%' : 'auto',
-                        aspectRatio: `${width} / ${height}`
+                        aspectRatio: `${displayW} / ${displayH}`
                     }}
                 />
             )}
