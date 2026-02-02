@@ -41,41 +41,37 @@ function findImageLayer(compId: string, assets: any[]): any | null {
 }
 
 /**
- * Creates a Lottie JSON that only shows the specified scene
- * but keeps ALL assets to ensure backgrounds/videos/images work.
+ * Creates a Lottie JSON that only shows the specified scene content
  */
 function prepareSceneLottie(fullTemplate: any, sceneId: string) {
     if (!fullTemplate || !sceneId) return null;
+
+    // Deep copy to avoid mutating original template
     const copy = JSON.parse(JSON.stringify(fullTemplate));
 
+    // Find the scene composition in assets
     const sceneComp = copy.assets?.find((a: any) => a.id === sceneId);
-    if (!sceneComp) return null;
+    if (!sceneComp || !sceneComp.layers) {
+        console.warn(`[LottiePreview] Scene asset ${sceneId} not found or has no layers.`);
+        return null;
+    }
 
-    // SCENE_ROOT dimension setup - IMPORTANT: viewBox undefined error fix
-    const w = sceneComp.w || copy.w || 1920;
-    const h = sceneComp.h || copy.h || 1080;
+    // Defensive check for dimensions
+    const w = Number(sceneComp.w) || Number(copy.w) || 1920;
+    const h = Number(sceneComp.h) || Number(copy.h) || 1080;
 
-    // Replace root layers with a single layer that references our scene composition
-    copy.layers = [{
-        ddd: 0,
-        ind: 1,
-        ty: 0, // Precomp
-        nm: "SCENE_ROOT",
-        refId: sceneId,
-        ks: {
-            o: { a: 0, k: 100 },
-            r: { a: 0, k: 0 },
-            p: { a: 0, k: [w / 2, h / 2] },
-            a: { a: 0, k: [w / 2, h / 2] },
-            s: { a: 0, k: [100, 100] }
-        },
-        ip: sceneComp.ip || 0,
-        op: sceneComp.op || 300,
-        st: 0
-    }];
-
+    /**
+     * MAJOR REFACTOR: Instead of nesting, make the scene composition the main layers.
+     * This avoids expression breakage and ensures all relative sizes are correct.
+     */
+    copy.layers = sceneComp.layers;
     copy.w = w;
     copy.h = h;
+
+    // Set timing to match the scene's length
+    // But for previewing, we often just want a fixed range or frame 0.
+    copy.ip = 0;
+    copy.op = (sceneComp.op || 300) - (sceneComp.ip || 0);
 
     return { lottie: copy, sceneIp: sceneComp.ip || 0 };
 }
@@ -95,6 +91,10 @@ function injectContent(
     const copy = lottieJson;
 
     if (!slots) return copy;
+
+    // Dimensions for background layer
+    const w = Number(copy.w) || 1920;
+    const h = Number(copy.h) || 1080;
 
     // 1. Photo replacement (Recursive search)
     slots.photos?.forEach(photoSlot => {
@@ -131,14 +131,14 @@ function injectContent(
         const bgLayer: any = {
             nm: '___MOMCAST_BG___',
             ty: 1, // Solid
-            sw: copy.w,
-            sh: copy.h,
+            sw: w,
+            sh: h,
             sc: backgroundColor || '#ffffff',
             ks: {
                 o: { a: 0, k: 100 },
                 r: { a: 0, k: 0 },
-                p: { a: 0, k: [copy.w / 2, copy.h / 2] },
-                a: { a: 0, k: [copy.w / 2, copy.h / 2] },
+                p: { a: 0, k: [w / 2, h / 2] },
+                a: { a: 0, k: [w / 2, h / 2] },
                 s: { a: 0, k: [100, 100] }
             },
             ip: 0,
@@ -155,7 +155,7 @@ function injectContent(
                 bgLayer.ty = 2; // Image
                 const blurAssetId = 'asset_blur_bg';
                 if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
-                    copy.assets.push({ id: blurAssetId, w: copy.w, h: copy.h, u: '', p: firstImgUrl, e: 0 });
+                    copy.assets.push({ id: blurAssetId, w: w, h: h, u: '', p: firstImgUrl, e: 0 });
                 }
                 bgLayer.refId = blurAssetId;
                 bgLayer.ef = [{
@@ -164,6 +164,7 @@ function injectContent(
                 }];
             }
         }
+        // Place background layer at the beginning of layers array
         copy.layers.unshift(bgLayer);
     }
 
@@ -188,11 +189,10 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const animRef = useRef<AnimationItem | null>(null);
 
     // 1. Process Lottie JSON (memoized)
-    const { processedJson, sceneIp } = useMemo(() => {
+    const processedJson = useMemo(() => {
         const preparedResult = prepareSceneLottie(fullTemplate, sceneId);
-        if (!preparedResult) return { processedJson: null, sceneIp: 0 };
-        const injected = injectContent(preparedResult.lottie, slots, userImages, userTexts, backgroundMode, backgroundColor);
-        return { processedJson: injected, sceneIp: preparedResult.sceneIp };
+        if (!preparedResult) return null;
+        return injectContent(preparedResult.lottie, slots, userImages, userTexts, backgroundMode, backgroundColor);
     }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
 
     // 2. Load Animation
@@ -205,26 +205,26 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         }
 
         try {
-            // Fix 404: Set assetsPath to /templates/ for generic templates
-            // In Production, it should be the URL where assets are stored.
             const anim = lottie.loadAnimation({
                 container: containerRef.current,
                 renderer: 'svg',
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
-                assetsPath: '/templates/images/' // Assuming all assets are in images/ subfolder
+                // Paths: assets are in /templates/images/ usually, but some might be in root
+                // Lottie will try p if u is empty.
+                assetsPath: '/templates/images/'
             });
 
             animRef.current = anim;
 
             anim.addEventListener('DOMLoaded', () => {
-                // Correct frame calculation: scene composition start frame + offset
-                const targetFrame = sceneIp + previewFrame;
-                anim.goToAndStop(targetFrame, true);
+                // Since we replaced the root with the scene composition, 
+                // the previewFrame is now relative to the beginning of the composition (frame 0).
+                anim.goToAndStop(previewFrame, true);
 
                 setTimeout(() => {
-                    if (animRef.current) animRef.current.goToAndStop(targetFrame, true);
+                    if (animRef.current) animRef.current.goToAndStop(previewFrame, true);
                 }, 100);
 
                 const svg = containerRef.current?.querySelector('svg');
@@ -236,14 +236,16 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             });
 
         } catch (e) {
-            console.error("Lottie load error:", e);
+            console.error("[LottiePreview] Load error:", e);
         }
 
         return () => {
-            animRef.current?.destroy();
-            animRef.current = null;
+            if (animRef.current) {
+                animRef.current.destroy();
+                animRef.current = null;
+            }
         };
-    }, [processedJson, previewFrame, sceneIp]);
+    }, [processedJson, previewFrame]);
 
     const displayW = width || 1920;
     const displayH = height || 1080;
@@ -262,7 +264,8 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     className="relative bg-transparent"
                     style={{
                         width: isVertical ? 'auto' : '100%',
-                        height: isVertical ? '100%' : 'auto',
+                        height: isVertical ? '450px' : 'auto', // Fixed height for editor if needed?
+                        maxHeight: '100%',
                         aspectRatio: `${displayW} / ${displayH}`
                     }}
                 />
