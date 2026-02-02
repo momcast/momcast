@@ -19,20 +19,38 @@ interface Props {
     backgroundColor?: string;
 }
 
-/**
- * PATH NORMALIZER: Ensures assets are loaded correctly.
- */
 function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
-    // Strip prefixes like 'te-images/' and point to our public flat folder
     const filename = p.split('/').pop() || p;
     return `/templates/images/${filename}`;
 }
 
 /**
- * HYPER-PRUNING v5: Balanced extraction for reliability.
+ * FUZZY MATCHING: Finds scene assets even with inconsistent naming (space, underscore, casing)
  */
+function findSceneAsset(assets: any[], sceneId: string) {
+    if (!assets || !sceneId) return null;
+    const cleanId = sceneId.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Exact match by ID
+    let found = assets.find(a => a.id === sceneId);
+    if (found) return found;
+
+    // 2. Exact match by Name
+    found = assets.find(a => a.nm && a.nm.toLowerCase() === sceneId.toLowerCase());
+    if (found) return found;
+
+    // 3. Fuzzy match by Name
+    found = assets.find(a => {
+        if (!a.nm) return false;
+        const cleanNm = a.nm.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cleanNm === cleanId || cleanNm.includes(cleanId) || cleanId.includes(cleanNm);
+    });
+
+    return found;
+}
+
 function hyperPrune(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const allAssets = template.assets || [];
@@ -50,18 +68,27 @@ function hyperPrune(template: any, sceneId: string) {
         }
     };
 
-    const sceneComp = allAssets.find((a: any) => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
+    const sceneComp = findSceneAsset(allAssets, sceneId);
     if (!sceneComp) {
-        console.warn(`[LottiePreview] Scene asset ${sceneId} not found.`);
+        console.warn(`[LottiePreview] Target scene ${sceneId} not found in assets.`);
         return null;
     }
+
     collectRecursive(sceneComp.id);
 
-    // Build optimized assets with corrected paths
     const prunedAssets = allAssets
         .filter((a: any) => usedAssetIds.has(a.id))
         .map((a: any) => {
             if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
+            if (a.layers) {
+                // Balanced filtering: only hide extreme glitches
+                const layers = a.layers.map((l: any) => {
+                    const nm = (l.nm || "").toLowerCase();
+                    if (nm.includes('white line') || (nm.includes('wipe') && l.ef)) return { ...l, hd: true };
+                    return l;
+                });
+                return { ...a, layers };
+            }
             return a;
         });
 
@@ -74,7 +101,12 @@ function hyperPrune(template: any, sceneId: string) {
         h: sceneComp.h || template.h,
         nm: `Hyper_${sceneId}`,
         assets: prunedAssets,
-        layers: sceneComp.layers // No aggressive hiding for now to restore background
+        layers: sceneComp.layers.map((l: any) => {
+            const nm = (l.nm || "").toLowerCase();
+            // Don't hide too much, just known glitches
+            if (nm.includes('white line')) return { ...l, hd: true };
+            return l;
+        })
     };
 }
 
@@ -118,22 +150,26 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
-    const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) setIsInView(true);
-        }, { threshold: 0.01, rootMargin: '300px' });
+        }, { threshold: 0.01, rootMargin: '400px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
     const processedJson = useMemo(() => {
         if (!isInView) return null;
-        const pruned = hyperPrune(fullTemplate, sceneId);
-        if (!pruned) return null;
-        return applyContent(pruned, slots, userImages, userTexts);
+        try {
+            const pruned = hyperPrune(fullTemplate, sceneId);
+            if (!pruned) return null;
+            return applyContent(pruned, slots, userImages, userTexts);
+        } catch (e) {
+            console.error(`Render Preparation Error [${sceneId}]:`, e);
+            return null;
+        }
     }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
 
     useEffect(() => {
@@ -152,27 +188,25 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
-                rendererSettings: { progressiveLoad: false }
+                rendererSettings: { progressiveLoad: false, hideOnTransparent: true }
             });
             animRef.current = instance;
 
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
                 instance.goToAndStop(previewFrame, true);
-                setIsLoaded(true);
-                // Ensure image scaling
+                // scaling fix
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error(`[LottiePreview] Render Error [${sceneId}]:`, e);
+            console.error(`Lottie Render Error [${sceneId}]:`, e);
         }
 
         return () => {
             if (instance) {
                 try { instance.destroy(); } catch (e) { }
                 if (animRef.current === instance) animRef.current = null;
-                instance = null;
             }
         };
     }, [processedJson, previewFrame, sceneId]);
@@ -182,7 +216,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const isV = dH > dW;
 
     return (
-        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`} style={{ backgroundColor }}>
+        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
             <div
                 ref={containerRef}
                 className="relative"
@@ -191,12 +225,13 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     height: isV ? '100%' : 'auto',
                     aspectRatio: `${dW} / ${dH}`,
                     maxWidth: '100%',
-                    maxHeight: '100%'
+                    maxHeight: '100%',
+                    backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
                 }}
             >
-                {!isLoaded && isInView && (
+                {isInView && !processedJson && (
                     <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-mono">
-                        RENDERING...
+                        INIT...
                     </div>
                 )}
             </div>

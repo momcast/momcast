@@ -17,6 +17,10 @@ const s3Client = new S3Client({
     },
 });
 
+// App Router config exports
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Increase timeout for large files
+
 export async function POST(req: NextRequest) {
     try {
         console.log("[R2-API] Upload started...");

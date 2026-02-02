@@ -10,13 +10,28 @@ export const uploadImageToR2 = async (
     file: Blob,
     fileName?: string
 ): Promise<string> => {
+    let fileToUpload: Blob = file;
+
+    // 413 Content Too Large 방지: 4MB 이상인 경우 압축 시도 (이미지인 경우)
+    if (file.size > 4 * 1024 * 1024 && file.type.startsWith('image/')) {
+        console.log(`[R2Service] File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds 4MB. Compressing...`);
+        try {
+            const compressed = await compressImage(file);
+            if (compressed) {
+                fileToUpload = compressed;
+                console.log(`[R2Service] Compressed to ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`);
+            }
+        } catch (e) {
+            console.warn("[R2Service] Compression failed, trying original file...", e);
+        }
+    }
+
     console.log("[R2Service] Attempting upload via Server Proxy API...");
 
     try {
         const formData = new FormData();
-        // File 객체가 아닌 Blob일 경우 이름을 수동 지정
-        const fileToUpload = file instanceof File ? file : new File([file], fileName || 'image.png', { type: file.type });
-        formData.append('file', fileToUpload);
+        const finalFile = fileToUpload instanceof File ? fileToUpload : new File([fileToUpload], fileName || 'image.png', { type: fileToUpload.type });
+        formData.append('file', finalFile);
 
         const response = await fetch('/api/upload/r2', {
             method: 'POST',
@@ -35,7 +50,6 @@ export const uploadImageToR2 = async (
     } catch (error: any) {
         console.error("❌ R2 API upload failed, switching to local Base64 fallback:", error);
 
-        // 업로드 실패 시 로컬에서 즉시 사용할 수 있도록 Base64로 전환
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => {
@@ -47,6 +61,39 @@ export const uploadImageToR2 = async (
         });
     }
 };
+
+/**
+ * 간단한 캔버스 기반 이미지 압축
+ */
+async function compressImage(file: Blob): Promise<Blob | null> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_SIDE = 2500;
+            if (width > MAX_SIDE || height > MAX_SIDE) {
+                if (width > height) {
+                    height = (height / width) * MAX_SIDE;
+                    width = MAX_SIDE;
+                } else {
+                    width = (width / height) * MAX_SIDE;
+                    height = MAX_SIDE;
+                }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+                resolve(blob);
+            }, 'image/jpeg', 0.8);
+        };
+        img.onerror = () => resolve(null);
+    });
+}
 
 /**
  * Canvas를 Blob으로 변환 후 R2 업로드
