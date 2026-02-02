@@ -27,230 +27,168 @@ function normalizeAssetPath(p: string): string {
 }
 
 /**
- * MASTER MATCHING ENGINE: 
- * Finds the correct comp asset by looking through root layers or master comps.
+ * MASTER MATCHING ENGINE v2: Powerful cross-reference search.
  */
 function findSceneComp(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const assets = template.assets || [];
-    const cleanSearch = sceneId.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    // 1. Direct ID/Name match in assets
-    let found = assets.find(a => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
-    if (found) return found;
-
-    // 2. Search in root layers
     const layers = template.layers || [];
+
+    const searchId = String(sceneId).toLowerCase();
+    const cleanSearch = searchId.replace(/[^0-9]/g, ''); // Extract numbers (e.g. "20")
+
+    // 1. Root Layers direct/fuzzy match
     const rootLayer = layers.find(l => {
-        const ln = (l.nm || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        return ln === cleanSearch || ln.includes(cleanSearch);
+        const ln = (l.nm || "").toLowerCase();
+        return ln === searchId || ln.includes(searchId) || (cleanSearch && ln.includes(cleanSearch) && ln.includes('scene'));
     });
-    if (rootLayer && rootLayer.refId) {
+    if (rootLayer?.refId) {
         const asset = assets.find(a => a.id === rootLayer.refId);
         if (asset) return asset;
     }
 
-    // 3. Search in Master Compositions (comp_0, comp_1, etc.)
-    const masterComps = assets.filter(a => a.layers && (a.id === 'comp_0' || (a.nm && a.nm.toLowerCase().includes('master'))));
-    for (const master of masterComps) {
-        const ml = master.layers.find(l => {
-            const ln = (l.nm || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-            return ln === cleanSearch || ln.includes(cleanSearch);
+    // 2. Search in Master Comp (comp_0)
+    const comp0 = assets.find(a => a.id === 'comp_0');
+    if (comp0?.layers) {
+        const ml = comp0.layers.find(l => {
+            const ln = (l.nm || "").toLowerCase();
+            return ln === searchId || ln.includes(searchId) || (cleanSearch && ln.includes(cleanSearch) && ln.includes('scene'));
         });
-        if (ml && ml.refId) {
+        if (ml?.refId) {
             const asset = assets.find(a => a.id === ml.refId);
             if (asset) return asset;
         }
     }
 
-    // 4. Fallback: Fuzzy asset name match
-    return assets.find(a => {
-        if (!a.nm) return false;
-        const an = a.nm.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return an.includes(cleanSearch);
-    });
-}
+    // 3. Asset Name direct match
+    const assetByName = assets.find(a => a.nm && a.nm.toLowerCase().includes(searchId));
+    if (assetByName) return assetByName;
 
-function hyperPrune(template: any, sceneId: string) {
-    if (!template || !sceneId) return null;
-    const allAssets = template.assets || [];
-    const usedAssetIds = new Set<string>();
-
-    const targetComp = findSceneComp(template, sceneId);
-    if (!targetComp) {
-        console.warn(`[LottiePreview] Cannot find scene comp for "${sceneId}"`);
-        return null;
-    }
-
-    const collectRecursive = (compId: string) => {
-        if (usedAssetIds.has(compId)) return;
-        const asset = allAssets.find((a: any) => a.id === compId);
-        if (!asset) return;
-        usedAssetIds.add(compId);
-        if (asset.layers) {
-            asset.layers.forEach((l: any) => {
-                if (l.refId) collectRecursive(l.refId);
-            });
-        }
-    };
-
-    collectRecursive(targetComp.id);
-
-    const prunedAssets = allAssets
-        .filter((a: any) => usedAssetIds.has(a.id))
-        .map((a: any) => {
-            if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
-            return a;
-        });
-
-    return {
-        v: template.v,
-        fr: template.fr,
-        ip: 0,
-        op: targetComp.op || 300,
-        w: targetComp.w || template.w,
-        h: targetComp.h || template.h,
-        nm: `Scene_${sceneId}`,
-        assets: prunedAssets,
-        layers: targetComp.layers || []
-    };
-}
-
-function applyContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
-    if (!json || !slots) return json;
-    const replaceImage = (compId: string, url: string) => {
-        const asset = json.assets.find((a: any) => a.id === compId);
-        if (!asset || !asset.layers) return;
-        asset.layers.forEach((l: any) => {
-            if (l.ty === 2 && l.refId) {
-                const imgAsset = json.assets.find((a: any) => a.id === l.refId);
-                if (imgAsset) { imgAsset.p = url; imgAsset.u = ''; }
-            } else if (l.ty === 0 && l.refId) {
-                replaceImage(l.refId, url);
-            }
-        });
-    };
-    slots.photos?.forEach(slot => {
-        const url = userImages[slot.id];
-        if (url) replaceImage(slot.id, url);
-    });
-    slots.texts?.forEach(slot => {
-        const text = userTexts[slot.id];
-        if (text === undefined) return;
-        const textAsset = json.assets.find((a: any) => a.id === slot.id);
-        if (textAsset?.layers) {
-            textAsset.layers.forEach((l: any) => {
-                if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = text;
-            });
-        }
-    });
-    return json;
+    return null;
 }
 
 export const LottieScenePreview: React.FC<Props> = React.memo(({
     fullTemplate, sceneId, slots,
     userImages = {}, userTexts = {},
     width, height, previewFrame = 0,
-    className = "", backgroundMode = 'transparent', backgroundColor = '#ffffff'
+    className = "", backgroundMode = 'transparent', backgroundColor = '#ffffff',
+    isEditor = false
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
-    const [status, setStatus] = useState<'init' | 'loading' | 'ready' | 'error'>('init');
+    const [debugInfo, setDebugInfo] = useState<{ scene: string, comp: string, assets: number } | null>(null);
 
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) setIsInView(true);
-        }, { threshold: 0.01, rootMargin: '300px' });
+        }, { threshold: 0.01, rootMargin: '400px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
     const processedJson = useMemo(() => {
-        if (!isInView) return null;
+        if (!isInView || !fullTemplate) return null;
         try {
-            const pruned = hyperPrune(fullTemplate, sceneId);
-            if (!pruned) {
-                setStatus('error');
+            const targetComp = findSceneComp(fullTemplate, sceneId);
+            if (!targetComp) {
+                console.warn(`[LottiePreview] Scene "${sceneId}" not found.`);
                 return null;
             }
-            const injected = applyContent(pruned, slots, userImages, userTexts);
-            setStatus('ready');
-            return injected;
+
+            // Simple Pruning for Speed & Reliability
+            const allAssets = fullTemplate.assets || [];
+            const usedIds = new Set<string>();
+            const collect = (id: string) => {
+                if (usedIds.has(id)) return;
+                const asset = allAssets.find((a: any) => a.id === id);
+                if (!asset) return;
+                usedIds.add(id);
+                if (asset.layers) asset.layers.forEach((l: any) => l.refId && collect(l.refId));
+            };
+            collect(targetComp.id);
+
+            const prunedAssets = allAssets.filter((a: any) => usedIds.has(a.id)).map((a: any) => {
+                const copy = { ...a };
+                if (copy.p) { copy.p = normalizeAssetPath(copy.p); copy.u = ''; }
+                return copy;
+            });
+
+            // Content Injection
+            const finalJson = {
+                v: fullTemplate.v, fr: fullTemplate.fr, ip: 0,
+                op: targetComp.op || 300, w: targetComp.w || fullTemplate.w, h: targetComp.h || fullTemplate.h,
+                assets: prunedAssets,
+                layers: JSON.parse(JSON.stringify(targetComp.layers || []))
+            };
+
+            // Deep Injection
+            const inject = (compId: string, url: string) => {
+                const asset = finalJson.assets.find((a: any) => a.id === compId);
+                if (!asset?.layers) return;
+                asset.layers.forEach((l: any) => {
+                    if (l.ty === 2 && l.refId) {
+                        const img = finalJson.assets.find((a: any) => a.id === l.refId);
+                        if (img) { img.p = url; img.u = ''; }
+                    } else if (l.ty === 0 && l.refId) inject(l.refId, url);
+                });
+            };
+            slots?.photos?.forEach(s => userImages[s.id] && inject(s.id, userImages[s.id]));
+            slots?.texts?.forEach(s => {
+                const txt = userTexts[s.id];
+                if (txt === undefined) return;
+                const asset = finalJson.assets.find((a: any) => a.id === s.id);
+                asset?.layers?.forEach((l: any) => { if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = txt; });
+            });
+
+            setDebugInfo({ scene: sceneId, comp: targetComp.id, assets: prunedAssets.length });
+            return finalJson;
         } catch (e) {
-            console.error(`[LottiePreview] Preparation Error [${sceneId}]:`, e);
-            setStatus('error');
+            console.error(`[LottiePreview] Logic Error [${sceneId}]:`, e);
             return null;
         }
     }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
 
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
-
         let instance: AnimationItem | null = null;
         try {
-            if (animRef.current) {
-                try { animRef.current.destroy(); } catch (e) { }
-                animRef.current = null;
-            }
-
+            if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
             instance = lottie.loadAnimation({
                 container: containerRef.current,
                 renderer: 'svg',
-                loop: false,
-                autoplay: false,
+                loop: false, autoplay: false,
                 animationData: processedJson,
                 rendererSettings: { progressiveLoad: false, hideOnTransparent: true }
             });
             animRef.current = instance;
-
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
                 instance.goToAndStop(previewFrame, true);
                 const svg = containerRef.current?.querySelector('svg');
-                if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
+                if (svg) svg.querySelectorAll('image').forEach(i => i.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
-        } catch (e) {
-            console.error(`[LottiePreview] Render Error [${sceneId}]:`, e);
-        }
+        } catch (e) { console.error(`[LottiePreview] Lottie Error:`, e); }
+        return () => { if (instance) instance.destroy(); };
+    }, [processedJson, previewFrame]);
 
-        return () => {
-            if (instance) {
-                try { instance.destroy(); } catch (e) { }
-                if (animRef.current === instance) animRef.current = null;
-            }
-        };
-    }, [processedJson, previewFrame, sceneId]);
-
-    const dW = processedJson?.w || fullTemplate?.w || width || 1920;
-    const dH = processedJson?.h || fullTemplate?.h || height || 1080;
+    const dW = processedJson?.w || 1920;
+    const dH = processedJson?.h || 1080;
     const isV = dH > dW;
 
     return (
         <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
-            <div
-                ref={containerRef}
-                className="relative"
-                style={{
-                    width: isV ? 'auto' : '100%',
-                    height: isV ? '100%' : 'auto',
-                    aspectRatio: `${dW} / ${dH}`,
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
-                }}
+            <div ref={containerRef} className="relative"
+                style={{ width: isV ? 'auto' : '100%', height: isV ? '100%' : 'auto', aspectRatio: `${dW}/${dH}`, maxWidth: '100%', maxHeight: '100%' }}
             >
-                {status === 'error' && (
-                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-red-400 font-mono text-center px-4">
-                        SCENE NOT FOUND<br />Check Mapping
+                {/* DEBUG OVERLAY (Only visible in dev) */}
+                {debugInfo && (
+                    <div className="absolute top-1 left-1 bg-black/50 text-[8px] text-white p-1 rounded font-mono pointer-events-none z-50">
+                        {debugInfo.scene} -> {debugInfo.comp} ({debugInfo.assets} assets)
                     </div>
                 )}
-                {isInView && status === 'init' && (
-                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-mono">
-                        INIT...
-                    </div>
-                )}
+                {!processedJson && isInView && <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400">LOADING...</div>}
             </div>
         </div>
     );
