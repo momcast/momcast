@@ -27,34 +27,60 @@ function normalizeAssetPath(p: string): string {
 }
 
 /**
- * FUZZY MATCHING: Finds scene assets even with inconsistent naming (space, underscore, casing)
+ * MASTER MATCHING ENGINE: 
+ * Finds the correct comp asset by looking through root layers or master comps.
  */
-function findSceneAsset(assets: any[], sceneId: string) {
-    if (!assets || !sceneId) return null;
-    const cleanId = sceneId.toLowerCase().replace(/[^a-z0-9]/g, '');
+function findSceneComp(template: any, sceneId: string) {
+    if (!template || !sceneId) return null;
+    const assets = template.assets || [];
+    const cleanSearch = sceneId.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // 1. Exact match by ID
-    let found = assets.find(a => a.id === sceneId);
+    // 1. Direct ID/Name match in assets
+    let found = assets.find(a => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
     if (found) return found;
 
-    // 2. Exact match by Name
-    found = assets.find(a => a.nm && a.nm.toLowerCase() === sceneId.toLowerCase());
-    if (found) return found;
-
-    // 3. Fuzzy match by Name
-    found = assets.find(a => {
-        if (!a.nm) return false;
-        const cleanNm = a.nm.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return cleanNm === cleanId || cleanNm.includes(cleanId) || cleanId.includes(cleanNm);
+    // 2. Search in root layers
+    const layers = template.layers || [];
+    const rootLayer = layers.find(l => {
+        const ln = (l.nm || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        return ln === cleanSearch || ln.includes(cleanSearch);
     });
+    if (rootLayer && rootLayer.refId) {
+        const asset = assets.find(a => a.id === rootLayer.refId);
+        if (asset) return asset;
+    }
 
-    return found;
+    // 3. Search in Master Compositions (comp_0, comp_1, etc.)
+    const masterComps = assets.filter(a => a.layers && (a.id === 'comp_0' || (a.nm && a.nm.toLowerCase().includes('master'))));
+    for (const master of masterComps) {
+        const ml = master.layers.find(l => {
+            const ln = (l.nm || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+            return ln === cleanSearch || ln.includes(cleanSearch);
+        });
+        if (ml && ml.refId) {
+            const asset = assets.find(a => a.id === ml.refId);
+            if (asset) return asset;
+        }
+    }
+
+    // 4. Fallback: Fuzzy asset name match
+    return assets.find(a => {
+        if (!a.nm) return false;
+        const an = a.nm.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return an.includes(cleanSearch);
+    });
 }
 
 function hyperPrune(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const allAssets = template.assets || [];
     const usedAssetIds = new Set<string>();
+
+    const targetComp = findSceneComp(template, sceneId);
+    if (!targetComp) {
+        console.warn(`[LottiePreview] Cannot find scene comp for "${sceneId}"`);
+        return null;
+    }
 
     const collectRecursive = (compId: string) => {
         if (usedAssetIds.has(compId)) return;
@@ -68,27 +94,12 @@ function hyperPrune(template: any, sceneId: string) {
         }
     };
 
-    const sceneComp = findSceneAsset(allAssets, sceneId);
-    if (!sceneComp) {
-        console.warn(`[LottiePreview] Target scene ${sceneId} not found in assets.`);
-        return null;
-    }
-
-    collectRecursive(sceneComp.id);
+    collectRecursive(targetComp.id);
 
     const prunedAssets = allAssets
         .filter((a: any) => usedAssetIds.has(a.id))
         .map((a: any) => {
             if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
-            if (a.layers) {
-                // Balanced filtering: only hide extreme glitches
-                const layers = a.layers.map((l: any) => {
-                    const nm = (l.nm || "").toLowerCase();
-                    if (nm.includes('white line') || (nm.includes('wipe') && l.ef)) return { ...l, hd: true };
-                    return l;
-                });
-                return { ...a, layers };
-            }
             return a;
         });
 
@@ -96,17 +107,12 @@ function hyperPrune(template: any, sceneId: string) {
         v: template.v,
         fr: template.fr,
         ip: 0,
-        op: sceneComp.op || 300,
-        w: sceneComp.w || template.w,
-        h: sceneComp.h || template.h,
-        nm: `Hyper_${sceneId}`,
+        op: targetComp.op || 300,
+        w: targetComp.w || template.w,
+        h: targetComp.h || template.h,
+        nm: `Scene_${sceneId}`,
         assets: prunedAssets,
-        layers: sceneComp.layers.map((l: any) => {
-            const nm = (l.nm || "").toLowerCase();
-            // Don't hide too much, just known glitches
-            if (nm.includes('white line')) return { ...l, hd: true };
-            return l;
-        })
+        layers: targetComp.layers || []
     };
 }
 
@@ -150,12 +156,13 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
+    const [status, setStatus] = useState<'init' | 'loading' | 'ready' | 'error'>('init');
 
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) setIsInView(true);
-        }, { threshold: 0.01, rootMargin: '400px' });
+        }, { threshold: 0.01, rootMargin: '300px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
@@ -164,10 +171,16 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         if (!isInView) return null;
         try {
             const pruned = hyperPrune(fullTemplate, sceneId);
-            if (!pruned) return null;
-            return applyContent(pruned, slots, userImages, userTexts);
+            if (!pruned) {
+                setStatus('error');
+                return null;
+            }
+            const injected = applyContent(pruned, slots, userImages, userTexts);
+            setStatus('ready');
+            return injected;
         } catch (e) {
-            console.error(`Render Preparation Error [${sceneId}]:`, e);
+            console.error(`[LottiePreview] Preparation Error [${sceneId}]:`, e);
+            setStatus('error');
             return null;
         }
     }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
@@ -195,12 +208,11 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
                 instance.goToAndStop(previewFrame, true);
-                // scaling fix
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error(`Lottie Render Error [${sceneId}]:`, e);
+            console.error(`[LottiePreview] Render Error [${sceneId}]:`, e);
         }
 
         return () => {
@@ -229,7 +241,12 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                     backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
                 }}
             >
-                {isInView && !processedJson && (
+                {status === 'error' && (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-red-400 font-mono text-center px-4">
+                        SCENE NOT FOUND<br />Check Mapping
+                    </div>
+                )}
+                {isInView && status === 'init' && (
                     <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400 font-mono">
                         INIT...
                     </div>
