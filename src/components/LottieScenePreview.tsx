@@ -25,12 +25,8 @@ interface Props {
 function findImageLayer(compId: string, assets: any[]): any | null {
     const comp = assets.find((a: any) => a.id === compId);
     if (!comp || !comp.layers) return null;
-
-    // 1. Direct image layer check
     const imgLayer = comp.layers.find((l: any) => l.ty === 2);
     if (imgLayer) return imgLayer;
-
-    // 2. Recursive check for nested precomps
     for (const layer of comp.layers) {
         if (layer.ty === 0 && layer.refId) {
             const found = findImageLayer(layer.refId, assets);
@@ -41,30 +37,71 @@ function findImageLayer(compId: string, assets: any[]): any | null {
 }
 
 /**
- * Prepares a Lottie JSON by ensuring all internal asset paths are correct
- * and identifying the scene's start time in the main timeline.
+ * SMART PRUNING: Keep only necessary layers and assets for a scene.
+ * This dramatically improves performance.
  */
-function prepareSceneLottie(fullTemplate: any, sceneId: string) {
+function prepareSceneLottiePruned(fullTemplate: any, sceneId: string) {
     if (!fullTemplate || !sceneId) return null;
 
-    // Deep copy to avoid mutating original template
-    const copy = JSON.parse(JSON.stringify(fullTemplate));
-
-    // Find the layer in the MAIN composition that references this sceneId
-    const sceneLayer = copy.layers.find((l: any) => l.refId === sceneId || (l.nm && l.nm.toLowerCase().includes(sceneId.toLowerCase())));
-    const sceneIp = sceneLayer ? sceneLayer.ip : 0;
-
-    // Fix 404: Force asset paths to /templates/images/
-    if (copy.assets) {
-        copy.assets.forEach((asset: any) => {
-            if (asset.p && !asset.p.startsWith('http') && !asset.p.startsWith('data:')) {
-                asset.p = `/templates/images/${asset.p}`;
-                asset.u = '';
-            }
-        });
+    // 1. Find the scene reference layer in the main composition
+    const sceneLayer = fullTemplate.layers?.find((l: any) =>
+        l.refId === sceneId || (l.nm && l.nm.toLowerCase().includes(sceneId.toLowerCase()))
+    );
+    if (!sceneLayer) {
+        // Fallback: If scene not in main comp, just find the comp asset directly
+        const directComp = fullTemplate.assets?.find((a: any) => a.id === sceneId);
+        if (!directComp) return null;
     }
 
-    return { lottie: copy, sceneIp };
+    const sceneIp = sceneLayer ? sceneLayer.ip : 0;
+    const sceneOp = sceneLayer ? sceneLayer.op : (fullTemplate.op || 300);
+
+    // 2. Identify "Global Backgrounds" (Layers visible at this scene's IP)
+    // We only take layers that aren't other scenes to save memory
+    const isSceneLayer = (l: any) => l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬'));
+    const bgLayers = fullTemplate.layers?.filter((l: any) =>
+        l !== sceneLayer && !isSceneLayer(l) && l.ip <= sceneIp && l.op >= sceneIp
+    ) || [];
+
+    // 3. Construct the pruned layer list
+    const layersToInclude = [...bgLayers, sceneLayer || { ty: 0, refId: sceneId, ip: 0, op: 9999, st: 0, ks: { o: { k: 100 }, r: { k: 0 }, p: { k: [Number(fullTemplate.w) / 2, Number(fullTemplate.h) / 2] }, a: { k: [Number(fullTemplate.w) / 2, Number(fullTemplate.h) / 2] }, s: { k: [100, 100] } } }];
+
+    // 4. Recursive asset collection to strictly prune the JSON
+    const usedAssetIds = new Set<string>();
+    const collectUsedAssets = (layers: any[]) => {
+        layers.forEach(l => {
+            if (l.refId) {
+                usedAssetIds.add(l.refId);
+                const asset = fullTemplate.assets?.find((a: any) => a.id === l.refId);
+                if (asset && asset.layers) collectUsedAssets(asset.layers);
+            }
+        });
+    };
+    collectUsedAssets(layersToInclude);
+
+    // 5. Build final pruned JSON
+    const pruned = {
+        v: fullTemplate.v, fr: fullTemplate.fr,
+        w: fullTemplate.w, h: fullTemplate.h,
+        nm: `Pruned_${sceneId}`, ddd: 0,
+        assets: fullTemplate.assets?.filter((a: any) => usedAssetIds.has(a.id)) || [],
+        layers: layersToInclude.map(l => ({
+            ...JSON.parse(JSON.stringify(l)),
+            st: l.st - sceneIp, // Normalize timing
+        })),
+        ip: 0,
+        op: sceneOp - sceneIp
+    };
+
+    // 6. Fix 404 Paths mapping
+    pruned.assets.forEach((asset: any) => {
+        if (asset.p && !asset.p.startsWith('http') && !asset.p.startsWith('data:')) {
+            asset.p = `/templates/images/${asset.p}`;
+            asset.u = '';
+        }
+    });
+
+    return { lottie: pruned, sceneIp: 0 };
 }
 
 /**
@@ -80,17 +117,14 @@ function injectContent(
 ) {
     if (!lottieJson) return null;
     const copy = lottieJson;
-
     if (!slots) return copy;
 
     const w = Number(copy.w) || 1920;
     const h = Number(copy.h) || 1080;
 
-    // 1. Photo replacement
     slots.photos?.forEach(photoSlot => {
         const imageUrl = userImages[photoSlot.id];
         if (!imageUrl) return;
-
         const imgLayer = findImageLayer(photoSlot.id, copy.assets);
         if (imgLayer && imgLayer.refId) {
             const imgAsset = copy.assets.find((a: any) => a.id === imgLayer.refId);
@@ -101,43 +135,38 @@ function injectContent(
         }
     });
 
-    // 2. Text replacement
     slots.texts?.forEach(textSlot => {
         const textContent = userTexts[textSlot.id];
         if (textContent === undefined) return;
-
         const textComp = copy.assets.find((a: any) => a.id === textSlot.id);
         if (!textComp || !textComp.layers) return;
-
         textComp.layers.forEach((l: any) => {
-            if (l.ty === 5 && l.t && l.t.d && l.t.d.k) {
+            if (l.ty === 5 && l.t?.d?.k) {
                 l.t.d.k[0].s.t = textContent;
             }
         });
     });
 
-    // 3. Optional Background injection
     if (backgroundMode === 'solid' || backgroundMode === 'blur') {
         const bgLayer: any = {
             nm: '___MOMCAST_BG___', ty: 1, sw: w, sh: h, sc: backgroundColor || '#ffffff',
             ks: { o: { a: 0, k: 100 }, r: { a: 0, k: 0 }, p: { a: 0, k: [w / 2, h / 2] }, a: { a: 0, k: [w / 2, h / 2] }, s: { a: 0, k: [100, 100] } },
-            ip: 0, op: 10000, st: 0, bm: 0
+            ip: 0, op: 10000, st: -100, bm: 0
         };
         if (backgroundMode === 'blur') {
             const firstPhotoId = slots.photos?.[0]?.id;
             const firstImgUrl = firstPhotoId ? userImages[firstPhotoId] : null;
             if (firstImgUrl) {
-                bgAssetId = 'asset_blur_bg';
-                if (!copy.assets.find((a: any) => a.id === bgAssetId)) {
-                    copy.assets.push({ id: bgAssetId, w: w, h: h, u: '', p: firstImgUrl, e: 0 });
+                const blurAssetId = 'asset_blur_bg';
+                if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
+                    copy.assets.push({ id: blurAssetId, w: w, h: h, u: '', p: firstImgUrl, e: 0 });
                 }
-                bgLayer.ty = 2; bgLayer.refId = bgAssetId;
+                bgLayer.ty = 2; bgLayer.refId = blurAssetId;
                 bgLayer.ef = [{ ty: 29, nm: 'Blur', mn: 'ADBE Gaussian Blur 2', en: 1, ef: [{ ty: 0, nm: 'Blur', mn: 'ADBE Gaussian Blur 2-0001', v: { a: 0, k: 60 } }] }];
             }
         }
         copy.layers.unshift(bgLayer);
     }
-
     return copy;
 }
 
@@ -150,11 +179,11 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
 
-    const { processedJson, sceneIp } = useMemo(() => {
-        const preparedResult = prepareSceneLottie(fullTemplate, sceneId);
-        if (!preparedResult) return { processedJson: null, sceneIp: 0 };
+    const { processedJson } = useMemo(() => {
+        const preparedResult = prepareSceneLottiePruned(fullTemplate, sceneId);
+        if (!preparedResult) return { processedJson: null };
         const injected = injectContent(preparedResult.lottie, slots, userImages, userTexts, backgroundMode, backgroundColor);
-        return { processedJson: injected, sceneIp: preparedResult.sceneIp };
+        return { processedJson: injected };
     }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
 
     useEffect(() => {
@@ -169,9 +198,8 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             });
             animRef.current = anim;
             anim.addEventListener('DOMLoaded', () => {
-                const targetFrame = sceneIp + previewFrame;
-                anim.goToAndStop(targetFrame, true);
-                setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(targetFrame, true); }, 100);
+                anim.goToAndStop(previewFrame, true);
+                setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(previewFrame, true); }, 100);
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
@@ -179,7 +207,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             console.error("[LottiePreview] Load error:", e);
         }
         return () => animRef.current?.destroy();
-    }, [processedJson, previewFrame, sceneIp]);
+    }, [processedJson, previewFrame]);
 
     const displayW = fullTemplate?.w || width || 1920;
     const displayH = fullTemplate?.h || height || 1080;
@@ -207,4 +235,3 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 });
 
 LottieScenePreview.displayName = 'LottieScenePreview';
-let bgAssetId: string;
