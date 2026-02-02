@@ -84,7 +84,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     backgroundMode = 'transparent',
     backgroundColor = '#ffffff',
     className = "",
-    renderer = 'canvas'
+    renderer = 'svg'
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
@@ -199,12 +199,14 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
             instance = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: renderer || 'canvas', // [최적화] SVG -> Canvas 전환 (성능 향상 및 마스킹 아티팩트/흰줄 제거)
+                renderer: renderer || 'svg', // [롤백] Canvas 이슈(이미지 미반영)로 인해 SVG로 복귀
                 loop: false, autoplay: false,
                 animationData: processedJson,
                 rendererSettings: {
                     preserveAspectRatio: 'xMidYMid slice',
-                    imagePreserveAspectRatio: 'xMidYMid slice'
+                    imagePreserveAspectRatio: 'xMidYMid slice',
+                    className: 'lottie-svg-container', // CSS 타겟팅용 클래스
+                    progressiveLoad: false,
                 }
             });
             animRef.current = instance;
@@ -227,6 +229,15 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
     return (
         <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
+            {/* [CSS Fix] SVG 렌더링 시 발생하는 흰색 줄(Sub-pixel Gap) 제거 */}
+            <style>{`
+                .lottie-svg-container path {
+                    stroke: transparent;
+                    stroke-width: 0.5px;
+                    vector-effect: non-scaling-stroke;
+                    shape-rendering: geometricPrecision;
+                }
+            `}</style>
             <div ref={containerRef} className="relative"
                 style={{
                     width: isV ? 'auto' : '100%',
