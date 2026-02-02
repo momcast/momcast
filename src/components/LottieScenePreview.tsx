@@ -115,42 +115,26 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
             console.log(`[LottiePreview] Scene "${sceneId}" matched as Comp ID: ${targetComp.id}, Layers: ${targetComp.layers?.length || 0}`);
 
-            const allAssets = fullTemplate.assets || [];
-            const usedIds = new Set<string>();
-
-            const collectAssets = (comp: any) => {
-                if (!comp || !comp.layers) return;
-                comp.layers.forEach((layer: any) => {
-                    if (layer.refId && !usedIds.has(layer.refId)) {
-                        const asset = allAssets.find((a: any) => a.id === layer.refId);
-                        if (asset) {
-                            usedIds.add(layer.refId);
-                            if (asset.layers) collectAssets(asset);
-                        }
-                    }
-                });
-            };
-
-            usedIds.add(targetComp.id);
-            collectAssets(targetComp);
-
-            console.log(`[LottiePreview] Pruning assets for "${sceneId}". Total assets collected: ${usedIds.size}`);
-
-            const prunedAssets = Array.from(usedIds)
-                .map(id => allAssets.find((a: any) => a.id === id))
-                .filter(Boolean)
-                .map((a: any) => {
-                    const copy = JSON.parse(JSON.stringify(a));
-                    if (copy.p) {
-                        copy.p = normalizeAssetPath(copy.p);
-                        copy.u = '';
-                    }
-                    return copy;
-                });
+            // [수정] 에셋을 가지치기(Pruning)하지 않고 전체를 유지하되 경로만 치환합니다.
+            // 가지치기는 마스크, 매트, 중첩 컴포지션 참조를 깨뜨릴 위험이 큽니다.
+            const processedAssets = (fullTemplate.assets || []).map((a: any) => {
+                const asset = { ...a };
+                if (asset.p && typeof asset.p === 'string' && !userImages[asset.id]) {
+                    asset.p = normalizeAssetPath(asset.p);
+                    asset.u = '';
+                }
+                // 사용자 이미지 주입
+                if (userImages[asset.id]) {
+                    console.log(`[LottiePreview] Injecting User Image: ${asset.id}`);
+                    asset.p = userImages[asset.id];
+                    asset.u = '';
+                }
+                return asset;
+            });
 
             const result = {
                 ...fullTemplate,
-                assets: prunedAssets,
+                assets: processedAssets,
                 layers: JSON.parse(JSON.stringify(targetComp.layers || [])),
                 w: targetComp.w || fullTemplate.w,
                 h: targetComp.h || fullTemplate.h,
@@ -159,23 +143,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 fr: fullTemplate.fr || 30
             };
 
-            console.log(`[LottiePreview] Processed JSON for "${sceneId}": ip=${result.ip}, op=${result.op}, layers=${result.layers?.length || 0}`);
-            if (result.layers && result.layers.length > 0) {
-                console.log(`[LottiePreview] Sample layer: nm=${result.layers[0].nm}, st=${result.layers[0].st}, ip=${result.layers[0].ip}, op=${result.layers[0].op}`);
-            }
-
-            // [데이터 주입] 이미지 슬롯
-            let injectedImages = 0;
-            if (result.assets) {
-                result.assets.forEach((asset: any) => {
-                    if (userImages[asset.id]) {
-                        console.log(`[LottiePreview] Injecting Image: ${asset.id} -> ${userImages[asset.id].substring(0, 30)}...`);
-                        asset.p = userImages[asset.id];
-                        asset.u = '';
-                        injectedImages++;
-                    }
-                });
-            }
+            console.log(`[LottiePreview] Ready to render "${sceneId}". Total assets: ${processedAssets.length}`);
 
             // [데이터 주입] 텍스트 슬롯 (모든 에셋/컴포지션 포함 재귀적 처리)
             let injectedTexts = 0;
@@ -214,7 +182,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 });
             }
 
-            console.log(`[LottiePreview] Ready to render "${sceneId}". Images: ${injectedImages}, Texts: ${injectedTexts}`);
+            console.log(`[LottiePreview] Ready to render "${sceneId}". Total assets: ${processedAssets.length}, Texts: ${injectedTexts}`);
             return result;
         } catch (error) {
             console.error(`[LottiePreview] Error [${sceneId}]:`, error);
@@ -232,7 +200,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 renderer: 'svg',
                 loop: false, autoplay: false,
                 animationData: processedJson,
-                rendererSettings: { progressiveLoad: false, hideOnTransparent: true }
+                rendererSettings: {
+                    preserveAspectRatio: 'xMidYMid slice'
+                }
             });
             animRef.current = instance;
             instance.addEventListener('DOMLoaded', () => {
