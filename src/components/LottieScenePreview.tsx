@@ -40,21 +40,21 @@ function findSceneComp(template: any, sceneId: string) {
     const sIdLower = sId.toLowerCase();
 
     // 1. [최우선] ID 정밀 매칭
-    let found = assets.find(a => a.id === sId);
+    let found = assets.find((a: any) => a.id === sId);
     if (found) return found;
 
     // 2. ID 대소문자 무시 매칭
-    found = assets.find(a => a.id && a.id.toLowerCase() === sIdLower);
+    found = assets.find((a: any) => a.id && a.id.toLowerCase() === sIdLower);
     if (found) return found;
 
     // 3. 이름(nm) 정밀 매칭 (AE 레이어 네임 기반)
-    found = assets.find(a => a.nm && a.nm.toLowerCase() === sIdLower);
+    found = assets.find((a: any) => a.nm && a.nm.toLowerCase() === sIdLower);
     if (found) return found;
 
     // 4. 이름(nm) 포함 매칭 (예: "scene 01" -> "01" 포함)
     const cleanNum = sId.replace(/[^0-9]/g, '');
     if (cleanNum && cleanNum.length > 0) {
-        found = assets.find(a => {
+        found = assets.find((a: any) => {
             if (!a.nm) return false;
             const nm = a.nm.toLowerCase();
             return nm.includes(cleanNum) && (nm.includes('scene') || nm.includes('씬') || nm.includes('comp'));
@@ -65,7 +65,7 @@ function findSceneComp(template: any, sceneId: string) {
     // 5. 숫자로만 된 ID 대응 (예: "1" -> "comp_1")
     if (!isNaN(Number(sId))) {
         const compId = `comp_${sId}`;
-        found = assets.find(a => a.id === compId);
+        found = assets.find((a: any) => a.id === compId);
         if (found) return found;
     }
 
@@ -90,6 +90,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const animRef = useRef<AnimationItem | null>(null);
     // 모달 등 특수 환경에서 IntersectionObserver 오작동 방지를 위해 기본값 true
     const [isInView, setIsInView] = useState(true);
+    const [mountKey, setMountKey] = useState(0);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -192,6 +193,11 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         }
     }, [fullTemplate, sceneId, userImages, userTexts, isInView]);
 
+    // [최적화] Canvas 모드에서의 리렌더링 이슈 해결
+    useEffect(() => {
+        setMountKey(prev => prev + 1);
+    }, [userImages, userTexts, sceneId]);
+
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
         let instance: AnimationItem | null = null;
@@ -199,14 +205,13 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
             instance = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: renderer || 'svg', // [롤백] Canvas 이슈(이미지 미반영)로 인해 SVG로 복귀
+                renderer: renderer || 'canvas', // [최적화] Canvas로 다시 전환
                 loop: false, autoplay: false,
                 animationData: processedJson,
                 rendererSettings: {
                     preserveAspectRatio: 'xMidYMid slice',
                     imagePreserveAspectRatio: 'xMidYMid slice',
-                    className: 'lottie-svg-container', // CSS 타겟팅용 클래스
-                    progressiveLoad: false,
+                    clearCanvas: true
                 }
             });
             animRef.current = instance;
@@ -214,14 +219,12 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 if (!instance) return;
                 console.log(`[LottiePreview] Animation Loaded for ${sceneId}`);
                 instance.goToAndStop(previewFrame, true);
-                const svg = containerRef.current?.querySelector('svg');
-                if (svg) svg.querySelectorAll('image').forEach(i => i.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
             console.error(`[LottiePreview] Animation Init Error:`, e);
         }
         return () => { if (instance) instance.destroy(); };
-    }, [processedJson, previewFrame, sceneId]);
+    }, [processedJson, previewFrame, sceneId, renderer, mountKey]);
 
     const dW = processedJson?.w || width || 1920;
     const dH = processedJson?.h || height || 1080;
@@ -229,16 +232,10 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
     return (
         <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
-            {/* [CSS Fix] SVG 렌더링 시 발생하는 흰색 줄(Sub-pixel Gap) 제거 */}
-            <style>{`
-                .lottie-svg-container path {
-                    stroke: transparent;
-                    stroke-width: 0.5px;
-                    vector-effect: non-scaling-stroke;
-                    shape-rendering: geometricPrecision;
-                }
-            `}</style>
-            <div ref={containerRef} className="relative"
+            <div
+                key={mountKey} // [핵심] 키 업데이트로 강제 리마운트 -> Canvas 갱신 보장
+                ref={containerRef}
+                className="relative"
                 style={{
                     width: isV ? 'auto' : '100%',
                     height: isV ? '100%' : 'auto',

@@ -6,9 +6,9 @@ const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_
 
 // Helper to get S3 client with current environment variables
 function getS3Client() {
-    const id = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID;
-    const ak = process.env.R2_ACCESS_KEY || process.env.NEXT_PUBLIC_VITE_R2_ACCESS_KEY;
-    const sk = process.env.R2_SECRET_KEY || process.env.NEXT_PUBLIC_VITE_R2_SECRET_KEY;
+    const id = (process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID || "").trim();
+    const ak = (process.env.R2_ACCESS_KEY || process.env.NEXT_PUBLIC_VITE_R2_ACCESS_KEY || "").trim();
+    const sk = (process.env.R2_SECRET_KEY || process.env.NEXT_PUBLIC_VITE_R2_SECRET_KEY || "").trim();
 
     if (!id || !ak || !sk) {
         console.error("[R2-API] Missing credentials at runtime:", {
