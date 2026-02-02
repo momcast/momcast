@@ -30,56 +30,32 @@ const initR2Client = () => {
 };
 
 /**
- * R2에 이미지 업로드
- * @param file - 업로드할 이미지 Blob
- * @param fileName - 파일명 (선택)
- * @returns 업로드된 이미지의 Public URL
+ * R2에 이미지 업로드 (Server Proxy 사용으로 CORS 우회)
  */
 export const uploadImageToR2 = async (
     file: Blob,
     fileName?: string
 ): Promise<string> => {
-    const client = initR2Client();
-
-    // R2가 설정되지 않은 경우 Base64 폴백
-    if (!client) {
-        console.warn("🔄 Using base64 fallback for image storage");
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-        });
-    }
-
     try {
-        // 고유한 파일명 생성
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substring(2, 9);
-        const extension = fileName?.split('.').pop() || 'png';
-        const key = `uploads/${timestamp}_${randomStr}.${extension}`;
+        const formData = new FormData();
+        formData.append('file', file, fileName || 'image.png');
 
-        // R2에 업로드 (getReader 에러 방지를 위해 ArrayBuffer로 변환)
-        const arrayBuffer = await file.arrayBuffer();
-        await client.send(
-            new PutObjectCommand({
-                Bucket: R2_BUCKET,
-                Key: key,
-                Body: new Uint8Array(arrayBuffer),
-                ContentType: file.type || 'image/png',
-            })
-        );
+        const response = await fetch('/api/upload/r2', {
+            method: 'POST',
+            body: formData,
+        });
 
-        // Public URL 반환
-        const publicUrl = R2_PUBLIC_URL
-            ? `${R2_PUBLIC_URL}/${key}`
-            : `https://pub-${R2_ACCOUNT_ID}.r2.dev/${key}`;
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Upload failed');
+        }
 
-        console.log("✅ Image uploaded to R2:", publicUrl);
-        return publicUrl;
+        const data = await response.json();
+        console.log("✅ Image uploaded via API:", data.url);
+        return data.url;
 
     } catch (error) {
-        console.error("❌ R2 upload failed, using base64 fallback:", error);
-        // 업로드 실패시 Base64 폴백
+        console.error("❌ R2 API upload failed, using base64 fallback:", error);
         return new Promise((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);

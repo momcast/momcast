@@ -20,19 +20,19 @@ interface Props {
 }
 
 /**
- * STRATEGIC PATH NORMALIZER
+ * PATH NORMALIZER: Ensures assets are loaded correctly.
+ * Absolute URLs and DataURLs are preserved.
  */
-function normalizePath(p: string): string {
+function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
-    // Strip te-images/ and other subfolders for direct /templates/images focus
+    // Strip prefixes like 'images/' or 'te-images/' and point to our public flat folder
     const filename = p.split('/').pop() || p;
     return `/templates/images/${filename}`;
 }
 
 /**
- * HYPER-PRUNING ENGINE v2: 
- * Aggressively trims JSON and filters out rendering glitches.
+ * HYPER-PRUNING v4: Surgical Json Extraction
  */
 function hyperPrune(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
@@ -40,86 +40,63 @@ function hyperPrune(template: any, sceneId: string) {
     const allAssets = template.assets || [];
     const usedAssetIds = new Set<string>();
 
-    const collectDeepAssets = (compId: string) => {
+    const collectRecursive = (compId: string) => {
         if (usedAssetIds.has(compId)) return;
         const asset = allAssets.find((a: any) => a.id === compId);
         if (!asset) return;
         usedAssetIds.add(compId);
         if (asset.layers) {
             asset.layers.forEach((l: any) => {
-                if (l.refId) collectDeepAssets(l.refId);
+                if (l.refId) collectRecursive(l.refId);
             });
         }
     };
 
-    // Find target scene comp
-    const sceneAsset = allAssets.find((a: any) => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
-    if (!sceneAsset) return null;
+    // Find the scene comp
+    const sceneComp = allAssets.find((a: any) => a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase()));
+    if (!sceneComp) return null;
 
-    collectDeepAssets(sceneAsset.id);
+    collectRecursive(sceneComp.id);
 
-    // Deep Filter for Glitches
-    const filterGlitchLayers = (layers: any[]) => {
-        if (!layers) return [];
-        return JSON.parse(JSON.stringify(layers)).map((l: any) => {
-            const name = (l.nm || "").toLowerCase();
-
-            // AGGRESSIVE TRANSITION FILTERING (The "White Line" fix)
-            const isGlitchy =
-                name.includes('transition') ||
-                name.includes('트랜지션') ||
-                name.includes('wipe') ||
-                name.includes('radial') ||
-                name.includes('빛') ||
-                name.includes('flash') ||
-                name.includes('선') ||
-                name.includes('라인') ||
-                name.includes('white') ||
-                name.includes('shimmer') ||
-                (l.ef && l.ef.some((e: any) => e.nm && (e.nm.includes('Wipe') || e.nm.includes('Transition'))));
-
-            if (isGlitchy) {
-                return { ...l, hd: true }; // Hide and set op to 0 for safety
-            }
-
-            // Recursively filter sub-asset layers if needed (pre-processing assets)
-            return l;
-        });
-    };
-
-    // Build optimized JSON
-    const finalAssets = allAssets
+    // Build lean JSON
+    const prunedAssets = allAssets
         .filter((a: any) => usedAssetIds.has(a.id))
         .map((a: any) => {
             if (a.layers) {
-                return { ...a, layers: filterGlitchLayers(a.layers) };
+                // Filter glitchy layers even in nested assets
+                const subLayers = a.layers.map((l: any) => {
+                    const nm = (l.nm || "").toLowerCase();
+                    if (nm.includes('transition') || nm.includes('wipe')) return { ...l, hd: true };
+                    return l;
+                });
+                return { ...a, layers: subLayers };
             }
-            if (a.p) return { ...a, p: normalizePath(a.p), u: '' };
+            // For images, fix path and clear relative dir
+            if (a.p) return { ...a, p: normalizeAssetPath(a.p), u: '' };
             return a;
         });
 
-    const prunedJson = {
+    return {
         v: template.v,
         fr: template.fr,
         ip: 0,
-        op: sceneAsset.op || 300,
-        w: sceneAsset.w || template.w,
-        h: sceneAsset.h || template.h,
-        nm: `HyperPruned_${sceneId}`,
-        assets: finalAssets,
-        layers: filterGlitchLayers(sceneAsset.layers)
+        op: sceneComp.op || 300,
+        w: sceneComp.w || template.w,
+        h: sceneComp.h || template.h,
+        nm: `Hyper_${sceneId}`,
+        assets: prunedAssets,
+        layers: sceneComp.layers.map((l: any) => {
+            const nm = (l.nm || "").toLowerCase();
+            if (nm.includes('transition') || nm.includes('wipe')) return { ...l, hd: true };
+            return l;
+        })
     };
-
-    return prunedJson;
 }
 
-/**
- * CONTENT INJECTOR
- */
-function injectContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
+function applyContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
     if (!json || !slots) return json;
 
-    const findAndReplace = (compId: string, url: string) => {
+    const replaceImage = (compId: string, url: string) => {
         const asset = json.assets.find((a: any) => a.id === compId);
         if (!asset || !asset.layers) return;
         asset.layers.forEach((l: any) => {
@@ -127,22 +104,22 @@ function injectContent(json: any, slots: SceneSlots | undefined, userImages: Rec
                 const imgAsset = json.assets.find((a: any) => a.id === l.refId);
                 if (imgAsset) { imgAsset.p = url; imgAsset.u = ''; }
             } else if (l.ty === 0 && l.refId) {
-                findAndReplace(l.refId, url);
+                replaceImage(l.refId, url);
             }
         });
     };
 
     slots.photos?.forEach(slot => {
         const url = userImages[slot.id];
-        if (url) findAndReplace(slot.id, url);
+        if (url) replaceImage(slot.id, url);
     });
 
     slots.texts?.forEach(slot => {
         const text = userTexts[slot.id];
         if (text === undefined) return;
-        const textComp = json.assets.find((a: any) => a.id === slot.id);
-        if (textComp?.layers) {
-            textComp.layers.forEach((l: any) => {
+        const textAsset = json.assets.find((a: any) => a.id === slot.id);
+        if (textAsset?.layers) {
+            textAsset.layers.forEach((l: any) => {
                 if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = text;
             });
         }
@@ -160,48 +137,45 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
+    const [readyToRender, setReadyToRender] = useState(false);
 
-    // 1. Hyper-Pruning Engine
-    const processedJson = useMemo(() => {
-        const pruned = hyperPrune(fullTemplate, sceneId);
-        if (!pruned) return null;
-        return injectContent(pruned, slots, userImages, userTexts);
-    }, [fullTemplate, sceneId, slots, userImages, userTexts]);
-
-    // 2. Intersection Observer (RAM Manager)
+    // 1. Intersection Observer
     useEffect(() => {
         if (!containerRef.current) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => setIsInView(entry.isIntersecting),
-            { threshold: 0.05, rootMargin: '200px' } // Preload a bit early
-        );
+        const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+                setIsInView(true);
+                // Extra debounce to avoid jank during fast scroll
+                setTimeout(() => setReadyToRender(true), 150);
+            }
+        }, { threshold: 0.01, rootMargin: '300px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
-    // 3. Render Lifecycle
+    // 2. Optimized JSON Generation
+    const processedJson = useMemo(() => {
+        if (!readyToRender) return null;
+        const pruned = hyperPrune(fullTemplate, sceneId);
+        if (!pruned) return null;
+        return applyContent(pruned, slots, userImages, userTexts);
+    }, [fullTemplate, sceneId, slots, userImages, userTexts, readyToRender]);
+
+    // 3. Lottie Core
     useEffect(() => {
-        if (!containerRef.current || !processedJson || !isInView) {
-            if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
-            return;
-        }
+        if (!containerRef.current || !processedJson) return;
 
         try {
             if (animRef.current) animRef.current.destroy();
-
             const anim = lottie.loadAnimation({
                 container: containerRef.current,
                 renderer: 'svg',
                 loop: false,
                 autoplay: false,
                 animationData: processedJson,
-                rendererSettings: {
-                    hideOnTransparent: true,
-                    progressiveLoad: false // Faster for small pruned JSONs
-                }
+                rendererSettings: { progressiveLoad: true, hideOnTransparent: true }
             });
             animRef.current = anim;
-
             anim.addEventListener('DOMLoaded', () => {
                 anim.goToAndStop(previewFrame, true);
                 setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(previewFrame, true); }, 50);
@@ -209,36 +183,32 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error(`[LottiePreview] Render Error:`, e);
+            console.error(`Render Error [${sceneId}]:`, e);
         }
+        return () => { if (animRef.current) animRef.current.destroy(); animRef.current = null; };
+    }, [processedJson, previewFrame, sceneId]);
 
-        return () => { if (animRef.current) { animRef.current.destroy(); animRef.current = null; } };
-    }, [processedJson, isInView, previewFrame]);
-
-    const displayW = processedJson?.w || fullTemplate?.w || width || 1920;
-    const displayH = processedJson?.h || fullTemplate?.h || height || 1080;
-    const isVertical = displayH > displayW;
+    const dW = processedJson?.w || fullTemplate?.w || width || 1920;
+    const dH = processedJson?.h || fullTemplate?.h || height || 1080;
+    const isV = dH > dW;
 
     return (
-        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden bg-transparent ${className}`}>
-            {!processedJson ? (
-                <div className="text-[10px] text-gray-400">Pruning Scene...</div>
-            ) : (
-                <div
-                    ref={containerRef}
-                    className="relative"
-                    style={{
-                        width: isVertical ? 'auto' : '100%',
-                        height: isVertical ? '100%' : 'auto',
-                        aspectRatio: `${displayW} / ${displayH}`,
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
-                    }}
-                >
-                    {!isInView && <div className="absolute inset-0 bg-gray-50/10 backdrop-blur-sm" />}
-                </div>
-            )}
+        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
+            <div
+                ref={containerRef}
+                className="relative"
+                style={{
+                    width: isV ? 'auto' : '100%',
+                    height: isV ? '100%' : 'auto',
+                    aspectRatio: `${dW} / ${dH}`,
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    backgroundColor: backgroundMode === 'solid' ? backgroundColor : 'transparent'
+                }}
+            >
+                {!readyToRender && <div className="absolute inset-0 bg-gray-50/5" />}
+                {readyToRender && !processedJson && <div className="text-[10px] text-gray-300">Loading...</div>}
+            </div>
         </div>
     );
 });
