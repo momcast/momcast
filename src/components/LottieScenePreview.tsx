@@ -20,16 +20,21 @@ interface Props {
 }
 
 /**
- * Helper: Find image layer recursively inside a composition tree
+ * DEEP SEARCH: Recursively find an image layer linked to a slot.
+ * It follows the composition tree until it finds a type 2 (image) layer.
  */
-function findImageLayer(compId: string, assets: any[]): any | null {
+function findImageLayerDeep(compId: string, assets: any[]): any | null {
     const comp = assets.find((a: any) => a.id === compId);
     if (!comp || !comp.layers) return null;
+
+    // 1. Check for direct image layer
     const imgLayer = comp.layers.find((l: any) => l.ty === 2);
     if (imgLayer) return imgLayer;
+
+    // 2. Search deeper into nested precomps
     for (const layer of comp.layers) {
         if (layer.ty === 0 && layer.refId) {
-            const found = findImageLayer(layer.refId, assets);
+            const found = findImageLayerDeep(layer.refId, assets);
             if (found) return found;
         }
     }
@@ -37,97 +42,103 @@ function findImageLayer(compId: string, assets: any[]): any | null {
 }
 
 /**
- * SMART PRUNING: Keep only necessary layers and assets for a scene.
- * This dramatically improves performance.
+ * RECONSTRUCT: Ensure all assets required by a specific composition are collected.
  */
-function prepareSceneLottiePruned(fullTemplate: any, sceneId: string) {
-    if (!fullTemplate || !sceneId) return null;
+function collectRequiredAssets(compId: string, allAssets: any[], collectedIds: Set<string>) {
+    if (collectedIds.has(compId)) return;
+    const asset = allAssets.find(a => a.id === compId);
+    if (!asset) return;
 
-    // 1. Find the scene reference layer in the main composition
-    const sceneLayer = fullTemplate.layers?.find((l: any) =>
-        l.refId === sceneId || (l.nm && l.nm.toLowerCase().includes(sceneId.toLowerCase()))
-    );
-    if (!sceneLayer) {
-        // Fallback: If scene not in main comp, just find the comp asset directly
-        const directComp = fullTemplate.assets?.find((a: any) => a.id === sceneId);
-        if (!directComp) return null;
-    }
+    collectedIds.add(compId);
 
-    const sceneIp = sceneLayer ? sceneLayer.ip : 0;
-    const sceneOp = sceneLayer ? sceneLayer.op : (fullTemplate.op || 300);
-
-    // 2. Identify "Global Backgrounds" (Layers visible at this scene's IP)
-    // We only take layers that aren't other scenes to save memory
-    const isSceneLayer = (l: any) => l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬'));
-    const bgLayers = fullTemplate.layers?.filter((l: any) =>
-        l !== sceneLayer && !isSceneLayer(l) && l.ip <= sceneIp && l.op >= sceneIp
-    ) || [];
-
-    // 3. Construct the pruned layer list
-    const layersToInclude = [...bgLayers, sceneLayer || { ty: 0, refId: sceneId, ip: 0, op: 9999, st: 0, ks: { o: { k: 100 }, r: { k: 0 }, p: { k: [Number(fullTemplate.w) / 2, Number(fullTemplate.h) / 2] }, a: { k: [Number(fullTemplate.w) / 2, Number(fullTemplate.h) / 2] }, s: { k: [100, 100] } } }];
-
-    // 4. Recursive asset collection to strictly prune the JSON
-    const usedAssetIds = new Set<string>();
-    const collectUsedAssets = (layers: any[]) => {
-        layers.forEach(l => {
+    if (asset.layers) {
+        asset.layers.forEach((l: any) => {
             if (l.refId) {
-                usedAssetIds.add(l.refId);
-                const asset = fullTemplate.assets?.find((a: any) => a.id === l.refId);
-                if (asset && asset.layers) collectUsedAssets(asset.layers);
+                collectRequiredAssets(l.refId, allAssets, collectedIds);
             }
         });
-    };
-    collectUsedAssets(layersToInclude);
+    }
+}
 
-    // 5. Build final pruned JSON
-    const pruned = {
-        v: fullTemplate.v, fr: fullTemplate.fr,
-        w: fullTemplate.w, h: fullTemplate.h,
-        nm: `Pruned_${sceneId}`, ddd: 0,
-        assets: fullTemplate.assets?.filter((a: any) => usedAssetIds.has(a.id)) || [],
-        layers: layersToInclude.map(l => ({
-            ...JSON.parse(JSON.stringify(l)),
-            st: l.st - sceneIp, // Normalize timing
-        })),
-        ip: 0,
-        op: sceneOp - sceneIp
-    };
+/**
+ * SMART PRUNING V2: 
+ * - Extracts only necessary layers.
+ * - Freezes background at frame 0 for performance.
+ * - Ensures correct asset paths without duplicates.
+ */
+function prepareSceneLottieFixed(fullTemplate: any, sceneId: string) {
+    if (!fullTemplate || !sceneId) return null;
 
-    // 6. Fix 404 Paths mapping
-    pruned.assets.forEach((asset: any) => {
-        if (asset.p && !asset.p.startsWith('http') && !asset.p.startsWith('data:')) {
+    // Deep clone to safely mutate for this instance
+    const template = JSON.parse(JSON.stringify(fullTemplate));
+
+    // 1. Locate the scene's entry point in the main composition
+    const sceneLayer = template.layers?.find((l: any) =>
+        l.refId === sceneId || (l.nm && (l.nm.toLowerCase().includes(sceneId.toLowerCase()) || l.nm.includes('씬')))
+    );
+
+    // 2. Identify and collect all global background layers visible at scene start
+    const sceneIp = sceneLayer ? sceneLayer.ip : 0;
+    const isSceneNode = (l: any) => l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬'));
+
+    const backgroundLayers = template.layers?.filter((l: any) =>
+        l !== sceneLayer && !isSceneNode(l) && l.ip <= sceneIp && l.op >= sceneIp
+    ) || [];
+
+    const finalLayers = [...backgroundLayers, sceneLayer].filter(Boolean);
+
+    // 3. Prune assets to only what's actually used (Memory optimization)
+    const usedAssetIds = new Set<string>();
+    finalLayers.forEach(l => {
+        if (l.refId) collectRequiredAssets(l.refId, template.assets || [], usedAssetIds);
+    });
+
+    const prunedAssets = (template.assets || []).filter((a: any) => usedAssetIds.has(a.id));
+
+    // 4. Fix Asset Paths (Idempotent: prevents double prepending)
+    prunedAssets.forEach((asset: any) => {
+        if (asset.p && typeof asset.p === 'string' && !asset.p.startsWith('http') && !asset.p.startsWith('data:') && !asset.p.startsWith('/')) {
             asset.p = `/templates/images/${asset.p}`;
             asset.u = '';
         }
     });
 
-    return { lottie: pruned, sceneIp: 0 };
+    // 5. Construct the final lightweight JSON
+    const sceneJson = {
+        ...template,
+        assets: prunedAssets,
+        layers: finalLayers.map(l => ({
+            ...l,
+            st: l.st - sceneIp, // Normalize to start at 0
+        })),
+        ip: 0,
+        op: (sceneLayer?.op || 300) - sceneIp,
+        nm: `ScenePreview_${sceneId}`
+    };
+
+    return sceneJson;
 }
 
 /**
- * Injects user content into the Lottie JSON assets
+ * DEEP CONTENT INJECTOR:
+ * Recursively visits all assets to find the target slot composition/layer.
  */
-function injectContent(
+function injectDeepContent(
     lottieJson: any,
     slots: SceneSlots | undefined,
     userImages: Record<string, string>,
-    userTexts: Record<string, string>,
-    backgroundMode?: 'transparent' | 'solid' | 'blur',
-    backgroundColor?: string
+    userTexts: Record<string, string>
 ) {
-    if (!lottieJson) return null;
-    const copy = lottieJson;
-    if (!slots) return copy;
+    if (!lottieJson || !slots) return lottieJson;
 
-    const w = Number(copy.w) || 1920;
-    const h = Number(copy.h) || 1080;
-
+    // 1. Image Injection (Deep search)
     slots.photos?.forEach(photoSlot => {
         const imageUrl = userImages[photoSlot.id];
         if (!imageUrl) return;
-        const imgLayer = findImageLayer(photoSlot.id, copy.assets);
+
+        const imgLayer = findImageLayerDeep(photoSlot.id, lottieJson.assets);
         if (imgLayer && imgLayer.refId) {
-            const imgAsset = copy.assets.find((a: any) => a.id === imgLayer.refId);
+            const imgAsset = lottieJson.assets.find((a: any) => a.id === imgLayer.refId);
             if (imgAsset) {
                 imgAsset.u = '';
                 imgAsset.p = imageUrl;
@@ -135,39 +146,22 @@ function injectContent(
         }
     });
 
+    // 2. Text Injection (Deep search)
     slots.texts?.forEach(textSlot => {
         const textContent = userTexts[textSlot.id];
         if (textContent === undefined) return;
-        const textComp = copy.assets.find((a: any) => a.id === textSlot.id);
-        if (!textComp || !textComp.layers) return;
-        textComp.layers.forEach((l: any) => {
-            if (l.ty === 5 && l.t?.d?.k) {
-                l.t.d.k[0].s.t = textContent;
-            }
-        });
+
+        const textComp = lottieJson.assets.find((a: any) => a.id === textSlot.id);
+        if (textComp && textComp.layers) {
+            textComp.layers.forEach((l: any) => {
+                if (l.ty === 5 && l.t?.d?.k) {
+                    l.t.d.k[0].s.t = textContent;
+                }
+            });
+        }
     });
 
-    if (backgroundMode === 'solid' || backgroundMode === 'blur') {
-        const bgLayer: any = {
-            nm: '___MOMCAST_BG___', ty: 1, sw: w, sh: h, sc: backgroundColor || '#ffffff',
-            ks: { o: { a: 0, k: 100 }, r: { a: 0, k: 0 }, p: { a: 0, k: [w / 2, h / 2] }, a: { a: 0, k: [w / 2, h / 2] }, s: { a: 0, k: [100, 100] } },
-            ip: 0, op: 10000, st: -100, bm: 0
-        };
-        if (backgroundMode === 'blur') {
-            const firstPhotoId = slots.photos?.[0]?.id;
-            const firstImgUrl = firstPhotoId ? userImages[firstPhotoId] : null;
-            if (firstImgUrl) {
-                const blurAssetId = 'asset_blur_bg';
-                if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
-                    copy.assets.push({ id: blurAssetId, w: w, h: h, u: '', p: firstImgUrl, e: 0 });
-                }
-                bgLayer.ty = 2; bgLayer.refId = blurAssetId;
-                bgLayer.ef = [{ ty: 29, nm: 'Blur', mn: 'ADBE Gaussian Blur 2', en: 1, ef: [{ ty: 0, nm: 'Blur', mn: 'ADBE Gaussian Blur 2-0001', v: { a: 0, k: 60 } }] }];
-            }
-        }
-        copy.layers.unshift(bgLayer);
-    }
-    return copy;
+    return lottieJson;
 }
 
 export const LottieScenePreview: React.FC<Props> = React.memo(({
@@ -179,12 +173,12 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
 
-    const { processedJson } = useMemo(() => {
-        const preparedResult = prepareSceneLottiePruned(fullTemplate, sceneId);
-        if (!preparedResult) return { processedJson: null };
-        const injected = injectContent(preparedResult.lottie, slots, userImages, userTexts, backgroundMode, backgroundColor);
-        return { processedJson: injected };
-    }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
+    // Prepare processed JSON with memoization
+    const processedJson = useMemo(() => {
+        const prepared = prepareSceneLottieFixed(fullTemplate, sceneId);
+        if (!prepared) return null;
+        return injectDeepContent(prepared, slots, userImages, userTexts);
+    }, [fullTemplate, sceneId, slots, userImages, userTexts]);
 
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
@@ -193,20 +187,38 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         try {
             const anim = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: 'svg', loop: false, autoplay: false,
+                renderer: 'svg',
+                loop: false,
+                autoplay: false,
                 animationData: processedJson
             });
             animRef.current = anim;
+
             anim.addEventListener('DOMLoaded', () => {
+                // User-requested: "Freeze at frame 0 for preview"
+                // But we allow previewFrame override if needed (defaulting to 0)
                 anim.goToAndStop(previewFrame, true);
-                setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(previewFrame, true); }, 100);
+
+                // Secondary check for stability
+                setTimeout(() => {
+                    if (animRef.current) animRef.current.goToAndStop(previewFrame, true);
+                }, 50);
+
+                // Fix quality issues for injected images
                 const svg = containerRef.current?.querySelector('svg');
-                if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
+                if (svg) {
+                    svg.querySelectorAll('image').forEach(img => {
+                        img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+                    });
+                }
             });
         } catch (e) {
-            console.error("[LottiePreview] Load error:", e);
+            console.error("[LottiePreview] Load failure during render:", e);
         }
-        return () => animRef.current?.destroy();
+
+        return () => {
+            if (animRef.current) animRef.current.destroy();
+        };
     }, [processedJson, previewFrame]);
 
     const displayW = fullTemplate?.w || width || 1920;
@@ -216,11 +228,11 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     return (
         <div className={`relative w-full h-full flex items-center justify-center bg-transparent overflow-hidden ${className}`}>
             {!processedJson ? (
-                <div className="text-xs text-gray-400">Preview Unavailable</div>
+                <div className="text-xs text-gray-500 animate-pulse">Initializing Preview...</div>
             ) : (
                 <div
                     ref={containerRef}
-                    className="relative"
+                    className="relative transition-opacity duration-300"
                     style={{
                         width: isVertical ? 'auto' : '100%',
                         height: isVertical ? '100%' : 'auto',
