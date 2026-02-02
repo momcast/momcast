@@ -20,37 +20,21 @@ interface Props {
 }
 
 /**
- * PATH FIXER: Safely prepends asset paths without duplicates.
+ * PATH NORMALIZER: Strips prefixes and ensures flat assets/images path.
  */
-function safeAssetPath(p: string): string {
+function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
-    return `/templates/images/${p}`;
+
+    // Get only filename (strips te-images/ etc.)
+    const filename = p.split('/').pop() || p;
+    return `/templates/images/${filename}`;
 }
 
 /**
- * RECURSIVE SLOT SEARCH: Finds image/text layers even if deeply nested.
+ * RECURSIVE ASSET COLLECTOR
  */
-function findLayerInAsset(compId: string, assets: any[], type: number): any | null {
-    const asset = assets.find((a: any) => a.id === compId);
-    if (!asset || !asset.layers) return null;
-
-    const direct = asset.layers.find((l: any) => l.ty === type);
-    if (direct) return direct;
-
-    for (const l of asset.layers) {
-        if (l.ty === 0 && l.refId) {
-            const found = findLayerInAsset(l.refId, assets, type);
-            if (found) return found;
-        }
-    }
-    return null;
-}
-
-/**
- * ASSET COLLECTOR: Minimally collects required assets for a composition.
- */
-function collectAssetTree(compId: string, allAssets: any[], collected: Map<string, any>) {
+function collectAssets(compId: string, allAssets: any[], collected: Map<string, any>) {
     if (collected.has(compId)) return;
     const asset = allAssets.find(a => a.id === compId);
     if (!asset) return;
@@ -58,81 +42,117 @@ function collectAssetTree(compId: string, allAssets: any[], collected: Map<strin
     collected.set(compId, asset);
     if (asset.layers) {
         asset.layers.forEach((l: any) => {
-            if (l.refId) collectAssetTree(l.refId, allAssets, collected);
+            if (l.refId) collectAssets(l.refId, allAssets, collected);
         });
     }
 }
 
 /**
- * ZERO-CLONE PREPROCESSOR: 
- * Resolves the AE composition hierarchy to find the actual scene timeline.
- * Typical structures: Root -> Render -> SceneList -> Individual Scene
+ * CONTEXTUAL RESOLVER: Extracts scene + its sibling background context.
  */
-function resolveSceneLottie(template: any, sceneId: string) {
+function resolveContextualLottie(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
 
     const assets = template.assets || [];
-    let sceneLayer: any = null;
-    let masterIp = 0;
+    let targetLayer: any = null;
+    let parentNode: any = template; // can be template root or an asset
 
-    // 1. Recursive search for the scene layer in ALL assets and root layers
-    const findSceneLayerRecursive = (layers: any[], currentIpOffset: number): any => {
-        if (!layers) return null;
+    // 1. Find scene layer and its containing parent
+    const findInLayers = (layers: any[], parentContainer: any): boolean => {
         for (const l of layers) {
-            if (l.refId === sceneId || (l.nm && (l.nm.toLowerCase().includes(sceneId.toLowerCase()) || l.nm.includes('씬')))) {
-                masterIp = currentIpOffset + (l.ip || 0);
-                return l;
+            if (l.refId === sceneId || (l.nm && l.nm.includes(sceneId))) {
+                targetLayer = l;
+                parentNode = parentContainer;
+                return true;
             }
             if (l.ty === 0 && l.refId) {
-                const subAsset = assets.find((a: any) => a.id === l.refId);
-                if (subAsset) {
-                    const found = findSceneLayerRecursive(subAsset.layers, currentIpOffset + (l.st || 0));
-                    if (found) return found;
-                }
+                const sub = assets.find((a: any) => a.id === l.refId);
+                if (sub && sub.layers && findInLayers(sub.layers, sub)) return true;
             }
         }
-        return null;
+        return false;
     };
 
-    sceneLayer = findSceneLayerRecursive(template.layers, 0);
+    findInLayers(template.layers, template);
 
-    // 2. Identify global backgrounds (layers that overlap with sceneIp at ANY level)
-    // For simplicity and speed, we mainly collect background layers from the ROOT and the level above the scene.
-    const bgLayers: any[] = [];
-    if (template.layers) {
-        template.layers.forEach((l: any) => {
-            const isSceneNode = l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬'));
-            if (!isSceneNode && l.refId !== sceneId && l.ip <= masterIp && l.op >= masterIp) {
-                bgLayers.push(l);
-            }
-        });
+    if (!targetLayer) {
+        // Manual fallback if not found in hierarchy
+        const direct = assets.find((a: any) => a.id === sceneId);
+        if (!direct) return null;
+        targetLayer = { nm: sceneId, ty: 0, refId: sceneId, ip: 0, op: direct.op || 300, st: 0, ks: { p: { k: [template.w / 2, template.h / 2] }, a: { k: [template.w / 2, template.h / 2] }, s: { k: [100, 100] } } };
     }
 
-    const finalLayers = [...bgLayers, sceneLayer].filter(Boolean);
-    const usedAssets = new Map<string, any>();
-    finalLayers.forEach(l => {
-        if (l.refId) collectAssetTree(l.refId, assets, usedAssets);
+    // 2. Identify context (siblings in the same container)
+    const layers = parentNode.layers || [];
+    const bgLayers = layers.filter((l: any) => {
+        const isOtherScene = l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬')) && (l.refId !== sceneId && !l.nm.includes(sceneId));
+        // We take everything except other scenes that overlap in time
+        return l !== targetLayer && !isOtherScene && l.ip <= targetLayer.ip && l.op >= targetLayer.ip;
     });
 
-    // 3. Build optimized JSON (Shallow clone where possible)
-    const result = {
+    const finalLayers = [...bgLayers, targetLayer];
+    const usedAssets = new Map<string, any>();
+    finalLayers.forEach(l => {
+        if (l.refId) collectAssets(l.refId, assets, usedAssets);
+    });
+
+    // 3. Build optimized JSON
+    const sceneJson = {
         ...template,
         assets: Array.from(usedAssets.values()).map(a => {
-            if (a.p && !a.layers) { // For image assets, ensure safe path
-                return { ...a, p: safeAssetPath(a.p), u: '' };
-            }
+            if (a.p && !a.layers) return { ...a, p: normalizeAssetPath(a.p), u: '' };
             return a;
         }),
         layers: JSON.parse(JSON.stringify(finalLayers)).map((l: any) => ({
             ...l,
-            st: l.st - masterIp, // Normalize timing
+            st: l.st - targetLayer.st,
         })),
         ip: 0,
-        op: (sceneLayer?.op || 300) - (sceneLayer?.ip || 0),
-        nm: `Export_${sceneId}`
+        op: (targetLayer.op || 300) - (targetLayer.ip || 0),
+        nm: `ContextExtract_${sceneId}`
     };
 
-    return result;
+    return sceneJson;
+}
+
+/**
+ * DEEP SLOT CONTENT INJECTION
+ */
+function injectDeepSlotContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
+    if (!json || !slots) return json;
+
+    const injectImageToAsset = (compId: string, url: string) => {
+        const asset = json.assets.find((a: any) => a.id === compId);
+        if (!asset) return;
+        if (asset.layers) {
+            asset.layers.forEach((l: any) => {
+                if (l.ty === 2 && l.refId) {
+                    const imgAsset = json.assets.find((a: any) => a.id === l.refId);
+                    if (imgAsset) { imgAsset.p = url; imgAsset.u = ''; }
+                } else if (l.ty === 0 && l.refId) {
+                    injectImageToAsset(l.refId, url);
+                }
+            });
+        }
+    };
+
+    slots.photos?.forEach(slot => {
+        const url = userImages[slot.id];
+        if (url) injectImageToAsset(slot.id, url);
+    });
+
+    slots.texts?.forEach(slot => {
+        const text = userTexts[slot.id];
+        if (text === undefined) return;
+        const textComp = json.assets.find((a: any) => a.id === slot.id);
+        if (textComp?.layers) {
+            textComp.layers.forEach((l: any) => {
+                if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = text;
+            });
+        }
+    });
+
+    return json;
 }
 
 export const LottieScenePreview: React.FC<Props> = React.memo(({
@@ -145,32 +165,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const animRef = useRef<AnimationItem | null>(null);
 
     const processedJson = useMemo(() => {
-        const resolved = resolveSceneLottie(fullTemplate, sceneId);
-        if (!resolved) return null;
-
-        // Content Injection
-        slots?.photos?.forEach(slot => {
-            const url = userImages[slot.id];
-            if (!url) return;
-            const imgLayer = findLayerInAsset(slot.id, resolved.assets, 2);
-            if (imgLayer && imgLayer.refId) {
-                const asset = resolved.assets.find((a: any) => a.id === imgLayer.refId);
-                if (asset) { asset.p = url; asset.u = ''; }
-            }
-        });
-
-        slots?.texts?.forEach(slot => {
-            const text = userTexts[slot.id];
-            if (text === undefined) return;
-            const textComp = resolved.assets.find((a: any) => a.id === slot.id);
-            if (textComp?.layers) {
-                textComp.layers.forEach((l: any) => {
-                    if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = text;
-                });
-            }
-        });
-
-        return resolved;
+        const contextual = resolveContextualLottie(fullTemplate, sceneId);
+        if (!contextual) return null;
+        return injectDeepSlotContent(contextual, slots, userImages, userTexts);
     }, [fullTemplate, sceneId, slots, userImages, userTexts]);
 
     useEffect(() => {
@@ -186,12 +183,12 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             animRef.current = anim;
             anim.addEventListener('DOMLoaded', () => {
                 anim.goToAndStop(previewFrame, true);
-                setTimeout(() => animRef.current?.goToAndStop(previewFrame, true), 30);
+                setTimeout(() => { if (animRef.current) animRef.current.goToAndStop(previewFrame, true); }, 50);
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error("[LottiePreview] Render Error:", e);
+            console.error("[LottiePreview] Context Render Failure:", e);
         }
         return () => animRef.current?.destroy();
     }, [processedJson, previewFrame]);
@@ -203,7 +200,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     return (
         <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
             {!processedJson ? (
-                <div className="text-[10px] text-gray-400">Loading Scene...</div>
+                <div className="text-[10px] text-gray-400">Loading Context...</div>
             ) : (
                 <div
                     ref={containerRef}
