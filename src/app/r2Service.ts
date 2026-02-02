@@ -58,12 +58,13 @@ export const uploadImageToR2 = async (
         const extension = fileName?.split('.').pop() || 'png';
         const key = `uploads/${timestamp}_${randomStr}.${extension}`;
 
-        // R2에 업로드
+        // R2에 업로드 (getReader 에러 방지를 위해 ArrayBuffer로 변환)
+        const arrayBuffer = await file.arrayBuffer();
         await client.send(
             new PutObjectCommand({
                 Bucket: R2_BUCKET,
                 Key: key,
-                Body: file,
+                Body: new Uint8Array(arrayBuffer),
                 ContentType: file.type || 'image/png',
             })
         );

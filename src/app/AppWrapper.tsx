@@ -47,47 +47,7 @@ const Icons = {
 const STICKER_COUNT = 20;
 const STICKER_URLS = Array.from({ length: STICKER_COUNT }, (_, i) => `/stickers/sticker_${i}.png`);
 
-// Helper: Extract single scene from full template JSON
-function extractSceneLottie(fullTemplate: any, sceneCompId: string): any {
-  if (!fullTemplate || !sceneCompId) return null;
-  const sceneComp = fullTemplate.assets?.find((a: any) => a.id === sceneCompId);
-  if (!sceneComp) return null;
-
-  const usedAssetIds = new Set<string>();
-  function collectAssets(layers: any[]) {
-    if (!layers) return;
-    layers.forEach(layer => {
-      if (layer.refId) usedAssetIds.add(layer.refId);
-      if (layer.layers) collectAssets(layer.layers);
-    });
-  }
-  collectAssets(sceneComp.layers || []);
-
-  let prevSize = 0;
-  while (usedAssetIds.size > prevSize) {
-    prevSize = usedAssetIds.size;
-    Array.from(usedAssetIds).forEach(id => {
-      const asset = fullTemplate.assets?.find((a: any) => a.id === id);
-      if (asset && asset.layers) collectAssets(asset.layers);
-    });
-  }
-
-  const sceneAssets = fullTemplate.assets?.filter((a: any) => usedAssetIds.has(a.id)) || [];
-
-  return {
-    v: fullTemplate.v,
-    fr: fullTemplate.fr,
-    ip: 0,
-    op: (sceneComp.op || 100) - (sceneComp.ip || 0),
-    w: sceneComp.w,
-    h: sceneComp.h,
-    nm: sceneComp.nm,
-    ddd: 0,
-    assets: sceneAssets,
-    layers: sceneComp.layers || []
-  };
-}
-
+// Helper: transparency grid style
 const transparencyGridStyle = {
   backgroundImage: 'linear-gradient(45deg, #f9f9f9 25%, transparent 25%), linear-gradient(-45deg, #f9f9f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f9f9f9 75%), linear-gradient(-45deg, transparent 75%, #f9f9f9 75%)',
   backgroundSize: '16px 16px',
@@ -134,8 +94,8 @@ const ScenePreview: React.FC<{
 
   return (
     <div
-      className={`relative overflow-hidden w-full ${className} bg-transparent flex items-center justify-center`}
-      style={{ aspectRatio: '16 / 9' }}
+      className={`relative overflow-hidden w-full h-full ${className} bg-transparent flex items-center justify-center`}
+      style={{ aspectRatio: `${width} / ${height}` }}
     >
       {/* 1. Lottie Background (If available) */}
       {lottieTemplate && scene.id ? (
