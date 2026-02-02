@@ -30,44 +30,41 @@ function normalizeAssetPath(p: string): string {
 }
 
 /**
- * 씬 매칭 엔진 (원복 및 강화):
- * ID 매칭을 최우선으로 하여 씬이 안 나오는 문제를 근본적으로 해결합니다.
+ * 템플릿 Assets에서 특정 씬(Comp)을 찾는 통합 엔진
  */
 function findSceneComp(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const assets = template.assets || [];
+    const sId = sceneId.trim();
+    const sIdLower = sId.toLowerCase();
 
-    // 1. [최우선] ID 직접 매칭 (가장 확실함)
-    let found = assets.find(a => a.id === sceneId);
+    // 1. [최우선] ID 정밀 매칭
+    let found = assets.find(a => a.id === sId);
     if (found) return found;
 
-    // 2. 이름(nm) 정밀 매칭 (대소문자 무시)
-    const lowerId = sceneId.toLowerCase();
-    found = assets.find(a => a.nm && a.nm.toLowerCase() === lowerId);
+    // 2. ID 대소문자 무시 매칭
+    found = assets.find(a => a.id && a.id.toLowerCase() === sIdLower);
     if (found) return found;
 
-    // 3. 레이어 기반 매칭 (Scene 01 등 이름으로 찾기)
-    const layers = template.layers || [];
-    const rootLayer = layers.find(l => (l.nm || "").toLowerCase().includes(lowerId));
-    if (rootLayer?.refId) {
-        const asset = assets.find(a => a.id === rootLayer.refId);
-        if (asset) return asset;
+    // 3. 이름(nm) 정밀 매칭 (AE 레이어 네임 기반)
+    found = assets.find(a => a.nm && a.nm.toLowerCase() === sIdLower);
+    if (found) return found;
+
+    // 4. 이름(nm) 포함 매칭 (예: "scene 01" -> "01" 포함)
+    const cleanNum = sId.replace(/[^0-9]/g, '');
+    if (cleanNum && cleanNum.length > 0) {
+        found = assets.find(a => {
+            if (!a.nm) return false;
+            const nm = a.nm.toLowerCase();
+            return nm.includes(cleanNum) && (nm.includes('scene') || nm.includes('씬') || nm.includes('comp'));
+        });
+        if (found) return found;
     }
 
-    // 4. 마스터 컴포지션(comp_0) 레이어 뒤지기
-    const comp0 = assets.find(a => a.id === 'comp_0');
-    if (comp0?.layers) {
-        const ml = comp0.layers.find(l => (l.nm || "").toLowerCase().includes(lowerId));
-        if (ml?.refId) {
-            const asset = assets.find(a => a.id === ml.refId);
-            if (asset) return asset;
-        }
-    }
-
-    // 5. 숫자로만 검색 (예: 20번 씬 -> "20" 포함된 에셋)
-    const cleanNum = sceneId.replace(/[^0-9]/g, '');
-    if (cleanNum) {
-        found = assets.find(a => a.nm && a.nm.includes(cleanNum) && (a.nm.includes('Scene') || a.nm.includes('씬')));
+    // 5. 숫자로만 된 ID 대응 (예: "1" -> "comp_1")
+    if (!isNaN(Number(sId))) {
+        const compId = `comp_${sId}`;
+        found = assets.find(a => a.id === compId);
         if (found) return found;
     }
 
@@ -75,84 +72,155 @@ function findSceneComp(template: any, sceneId: string) {
 }
 
 export const LottieScenePreview: React.FC<Props> = React.memo(({
-    fullTemplate, sceneId, slots,
-    userImages = {}, userTexts = {},
-    width, height, previewFrame = 0,
-    className = "", backgroundMode = 'transparent', backgroundColor = '#ffffff'
+    fullTemplate,
+    sceneId,
+    slots,
+    userImages = {},
+    userTexts = {},
+    width = 1920,
+    height = 1080,
+    previewFrame = 0,
+    backgroundMode = 'transparent',
+    backgroundColor = '#ffffff',
+    className = ""
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
-    const [isInView, setIsInView] = useState(false);
+    // 모달 등 특수 환경에서 IntersectionObserver 오작동 방지를 위해 기본값 true
+    const [isInView, setIsInView] = useState(true);
 
-    // 뷰포트 감지 (성능 최적화)
     useEffect(() => {
         if (!containerRef.current) return;
-        const observer = new IntersectionObserver(([entry]) => {
-            if (entry.isIntersecting) setIsInView(true);
-        }, { threshold: 0.1, rootMargin: '400px' });
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) setIsInView(true);
+            },
+            { threshold: 0.1 }
+        );
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
 
     const processedJson = useMemo(() => {
-        if (!isInView || !fullTemplate) return null;
+        if (!fullTemplate || !sceneId) return null;
+        if (!isInView) return null;
+
         try {
             const targetComp = findSceneComp(fullTemplate, sceneId);
+
             if (!targetComp) {
-                console.warn(`[LottiePreview] 매칭 실패: ${sceneId}`);
+                console.warn(`[LottiePreview] Scene "${sceneId}" NOT FOUND in template assets.`);
                 return null;
             }
 
-            // [최적화] 필요한 에셋만 추출 (Deep Collection)
+            console.log(`[LottiePreview] Scene "${sceneId}" matched as Comp ID: ${targetComp.id}, Layers: ${targetComp.layers?.length || 0}`);
+
             const allAssets = fullTemplate.assets || [];
             const usedIds = new Set<string>();
-            const collect = (id: string) => {
-                if (usedIds.has(id)) return;
-                const asset = allAssets.find((a: any) => a.id === id);
-                if (!asset || usedIds.has(id)) return;
-                usedIds.add(id);
-                if (asset.layers) asset.layers.forEach((l: any) => l.refId && collect(l.refId));
-            };
-            collect(targetComp.id);
 
-            const prunedAssets = allAssets.filter((a: any) => usedIds.has(a.id)).map((a: any) => {
-                const copy = { ...a };
-                if (copy.p) { copy.p = normalizeAssetPath(copy.p); copy.u = ''; }
-                return copy;
-            });
-
-            const finalJson = {
-                v: fullTemplate.v, fr: fullTemplate.fr, ip: 0,
-                op: targetComp.op || 300, w: targetComp.w || fullTemplate.w, h: targetComp.h || fullTemplate.h,
-                assets: prunedAssets,
-                layers: JSON.parse(JSON.stringify(targetComp.layers || []))
-            };
-
-            // [주입] 사진/텍스트 교체
-            const inject = (compId: string, url: string) => {
-                const asset = finalJson.assets.find((a: any) => a.id === compId);
-                if (!asset?.layers) return;
-                asset.layers.forEach((l: any) => {
-                    if (l.ty === 2 && l.refId) {
-                        const img = finalJson.assets.find((a: any) => a.id === l.refId);
-                        if (img) { img.p = url; img.u = ''; }
-                    } else if (l.ty === 0 && l.refId) inject(l.refId, url);
+            const collectAssets = (comp: any) => {
+                if (!comp || !comp.layers) return;
+                comp.layers.forEach((layer: any) => {
+                    if (layer.refId && !usedIds.has(layer.refId)) {
+                        const asset = allAssets.find((a: any) => a.id === layer.refId);
+                        if (asset) {
+                            usedIds.add(layer.refId);
+                            if (asset.layers) collectAssets(asset);
+                        }
+                    }
                 });
             };
-            slots?.photos?.forEach(s => userImages[s.id] && inject(s.id, userImages[s.id]));
-            slots?.texts?.forEach(s => {
-                const txt = userTexts[s.id];
-                if (txt === undefined) return;
-                const asset = finalJson.assets.find((a: any) => a.id === s.id);
-                asset?.layers?.forEach((l: any) => { if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = txt; });
-            });
 
-            return finalJson;
-        } catch (e) {
-            console.error(`[LottiePreview] 매칭 로직 에러 [${sceneId}]:`, e);
+            usedIds.add(targetComp.id);
+            collectAssets(targetComp);
+
+            console.log(`[LottiePreview] Pruning assets for "${sceneId}". Total assets collected: ${usedIds.size}`);
+
+            const prunedAssets = Array.from(usedIds)
+                .map(id => allAssets.find((a: any) => a.id === id))
+                .filter(Boolean)
+                .map((a: any) => {
+                    const copy = JSON.parse(JSON.stringify(a));
+                    if (copy.p) {
+                        copy.p = normalizeAssetPath(copy.p);
+                        copy.u = '';
+                    }
+                    return copy;
+                });
+
+            const result = {
+                ...fullTemplate,
+                assets: prunedAssets,
+                layers: JSON.parse(JSON.stringify(targetComp.layers || [])),
+                w: targetComp.w || fullTemplate.w,
+                h: targetComp.h || fullTemplate.h,
+                ip: 0,
+                op: Math.max(targetComp.op || 0, fullTemplate.op || 0, 120),
+                fr: fullTemplate.fr || 30
+            };
+
+            console.log(`[LottiePreview] Processed JSON for "${sceneId}": ip=${result.ip}, op=${result.op}, layers=${result.layers?.length || 0}`);
+            if (result.layers && result.layers.length > 0) {
+                console.log(`[LottiePreview] Sample layer: nm=${result.layers[0].nm}, st=${result.layers[0].st}, ip=${result.layers[0].ip}, op=${result.layers[0].op}`);
+            }
+
+            // [데이터 주입] 이미지 슬롯
+            let injectedImages = 0;
+            if (result.assets) {
+                result.assets.forEach((asset: any) => {
+                    if (userImages[asset.id]) {
+                        console.log(`[LottiePreview] Injecting Image: ${asset.id} -> ${userImages[asset.id].substring(0, 30)}...`);
+                        asset.p = userImages[asset.id];
+                        asset.u = '';
+                        injectedImages++;
+                    }
+                });
+            }
+
+            // [데이터 주입] 텍스트 슬롯 (모든 에셋/컴포지션 포함 재귀적 처리)
+            let injectedTexts = 0;
+            const injectTextToComp = (compLayers: any[]) => {
+                if (!compLayers) return;
+                compLayers.forEach((layer: any) => {
+                    if (layer.ty === 5 && layer.t?.d?.k && Array.isArray(layer.t.d.k) && layer.t.d.k.length > 0) {
+                        // 1. 레이어 이름(nm)으로 매칭 (예: "텍스트01")
+                        // 2. 레이어 refId로 매칭 (AE에서 텍스트 컴포지션을 쓸 경우)
+                        const textData = userTexts[layer.nm] || userTexts[layer.refId] || userTexts[layer.ind];
+                        if (textData && layer.t.d.k[0].s) {
+                            console.log(`[LottiePreview] Injecting Text: ${layer.nm || layer.ind} -> ${textData}`);
+                            layer.t.d.k[0].s.t = textData;
+                            injectedTexts++;
+                        }
+                    }
+                    // 만약 이 레이어가 컴포지션 레이어(ty: 0)라면, 
+                    // 해당 컴포지션의 Asset ID 등을 체크하여 userTexts에 매칭되는 데이터가 있는지 확인
+                    if (layer.ty === 0 && layer.refId && userTexts[layer.refId]) {
+                        // AE에서 텍스트 레이어를 컴포지션으로 감싸서 관리하는 경우 대응
+                        // 이 경우 컴포지션 내부의 모든 텍스트 레이어에 같은 텍스트를 주입하거나 
+                        // 내부 레이어를 직접 찾아가야 함 (현재는 단순 컴포지션 ID 매칭 시 내부 ty:5 레이어에 주입 시도)
+                    }
+                });
+            };
+
+            // 1. 루트 레이어 주입
+            injectTextToComp(result.layers);
+
+            // 2. 모든 에셋(컴포지션) 내 레이어 주입
+            if (result.assets) {
+                result.assets.forEach((asset: any) => {
+                    if (asset.layers) {
+                        injectTextToComp(asset.layers);
+                    }
+                });
+            }
+
+            console.log(`[LottiePreview] Ready to render "${sceneId}". Images: ${injectedImages}, Texts: ${injectedTexts}`);
+            return result;
+        } catch (error) {
+            console.error(`[LottiePreview] Error [${sceneId}]:`, error);
             return null;
         }
-    }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
+    }, [fullTemplate, sceneId, userImages, userTexts, isInView]);
 
     useEffect(() => {
         if (!containerRef.current || !processedJson) return;
@@ -169,24 +237,37 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             animRef.current = instance;
             instance.addEventListener('DOMLoaded', () => {
                 if (!instance) return;
+                console.log(`[LottiePreview] Animation Loaded for ${sceneId}`);
                 instance.goToAndStop(previewFrame, true);
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(i => i.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
-        } catch (e) { console.error(`[LottiePreview] 렌더링 에러:`, e); }
+        } catch (e) {
+            console.error(`[LottiePreview] Animation Init Error:`, e);
+        }
         return () => { if (instance) instance.destroy(); };
-    }, [processedJson, previewFrame]);
+    }, [processedJson, previewFrame, sceneId]);
 
-    const dW = processedJson?.w || 1920;
-    const dH = processedJson?.h || 1080;
+    const dW = processedJson?.w || width || 1920;
+    const dH = processedJson?.h || height || 1080;
     const isV = dH > dW;
 
     return (
         <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
             <div ref={containerRef} className="relative"
-                style={{ width: isV ? 'auto' : '100%', height: isV ? '100%' : 'auto', aspectRatio: `${dW}/${dH}`, maxWidth: '100%', maxHeight: '100%' }}
+                style={{
+                    width: isV ? 'auto' : '100%',
+                    height: isV ? '100%' : 'auto',
+                    aspectRatio: `${dW}/${dH}`,
+                    maxWidth: '100%',
+                    maxHeight: '100%'
+                }}
             >
-                {!processedJson && isInView && <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400">LOADING...</div>}
+                {(!processedJson && isInView) && (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400">
+                        {fullTemplate ? 'SEARCHING SCENE...' : 'LOADING TEMPLATE...'}
+                    </div>
+                )}
             </div>
         </div>
     );

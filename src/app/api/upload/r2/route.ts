@@ -1,36 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// 서버 사이드에서만 사용하는 환경 변수 (NEXT_PUBLIC 생략)
+// Initial env check (will be re-checked inside handler for safety)
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID;
-const R2_ACCESS_KEY = process.env.R2_ACCESS_KEY || process.env.NEXT_PUBLIC_VITE_R2_ACCESS_KEY;
-const R2_SECRET_KEY = process.env.R2_SECRET_KEY || process.env.NEXT_PUBLIC_VITE_R2_SECRET_KEY;
-const R2_BUCKET = process.env.R2_BUCKET || process.env.NEXT_PUBLIC_VITE_R2_BUCKET || "momcast-photos";
-const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_VITE_R2_PUBLIC_URL;
 
-const s3Client = new S3Client({
-    region: "auto",
-    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-    credentials: {
-        accessKeyId: R2_ACCESS_KEY!,
-        secretAccessKey: R2_SECRET_KEY!,
-    },
-});
+// Helper to get S3 client with current environment variables
+function getS3Client() {
+    const id = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID;
+    const ak = process.env.R2_ACCESS_KEY || process.env.NEXT_PUBLIC_VITE_R2_ACCESS_KEY;
+    const sk = process.env.R2_SECRET_KEY || process.env.NEXT_PUBLIC_VITE_R2_SECRET_KEY;
 
-// App Router config exports
+    if (!id || !ak || !sk) {
+        console.error("[R2-API] Missing credentials at runtime:", {
+            id: id ? "exists" : "MISSING",
+            ak: ak ? "exists" : "MISSING",
+            sk: sk ? "exists" : "MISSING"
+        });
+        return null;
+    }
+
+    console.log("[R2-API] Initializing S3 Client with ID:", id.substring(0, 6) + "...");
+
+    return new S3Client({
+        region: "auto",
+        endpoint: `https://${id}.r2.cloudflarestorage.com`,
+        credentials: {
+            accessKeyId: ak,
+            secretAccessKey: sk,
+        },
+        forcePathStyle: true, // R2 supports both, but path style is sometimes more stable
+    });
+}
+
+const BUCKET = process.env.R2_BUCKET || "momcast-photos";
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_VITE_R2_PUBLIC_URL;
+
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Increase timeout for large files
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
     try {
-        console.log("[R2-API] Upload started...");
-        if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY || !R2_SECRET_KEY) {
-            console.error("[R2-API] Missing credentials:", {
-                ID: !!R2_ACCOUNT_ID,
-                AK: !!R2_ACCESS_KEY,
-                SK: !!R2_SECRET_KEY
-            });
-            return NextResponse.json({ error: "R2 credentials not configured" }, { status: 500 });
+        console.log("[R2-API] Upload request received.");
+        const s3 = getS3Client();
+
+        if (!s3) {
+            return NextResponse.json({
+                error: "R2 credentials not configured on server",
+                details: {
+                    ID: !!(process.env.R2_ACCOUNT_ID),
+                    AK: !!(process.env.R2_ACCESS_KEY),
+                    SK: !!(process.env.R2_SECRET_KEY)
+                }
+            }, { status: 500 });
         }
 
         const formData = await req.formData();
@@ -45,33 +66,30 @@ export async function POST(req: NextRequest) {
         const extension = file.name.split('.').pop() || 'png';
         const key = `uploads/${timestamp}_${randomStr}.${extension}`;
 
-        console.log(`[R2-API] Sending to R2 (Key: ${key})...`);
-        await s3Client.send(
+        console.log(`[R2-API] Uploading to R2: ${key} (${buffer.length} bytes)`);
+
+        await s3.send(
             new PutObjectCommand({
-                Bucket: R2_BUCKET,
+                Bucket: BUCKET,
                 Key: key,
                 Body: buffer,
                 ContentType: file.type || 'image/png',
             })
         );
 
-        const publicUrl = R2_PUBLIC_URL
-            ? `${R2_PUBLIC_URL}/${key}`
-            : `https://pub-${R2_ACCOUNT_ID}.r2.dev/${key}`;
+        const accountId = process.env.R2_ACCOUNT_ID || process.env.NEXT_PUBLIC_VITE_R2_ACCOUNT_ID;
+        const publicUrl = PUBLIC_URL
+            ? `${PUBLIC_URL}/${key}`
+            : `https://pub-${accountId}.r2.dev/${key}`;
 
         console.log("[R2-API] Upload Success:", publicUrl);
         return NextResponse.json({ url: publicUrl });
 
     } catch (error: any) {
-        console.error("[R2-API] Critical Error:", {
-            message: error.message,
-            code: error.code,
-            requestId: error.$metadata?.requestId,
-            statusCode: error.$metadata?.httpStatusCode
-        });
+        console.error("[R2-API] Critical Upload Error:", error);
         return NextResponse.json({
-            error: error.message,
-            code: error.code,
+            error: error.message || "Upload failed",
+            code: error.code || "UNKNOWN",
             details: error.$metadata
         }, { status: 500 });
     }
