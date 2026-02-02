@@ -15,11 +15,32 @@ export async function POST(req: NextRequest) {
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         const TEMPLATES_DIR = path.join(process.cwd(), 'public/templates');
 
+        console.log(`[Sync] Starting sync... CWD: ${process.cwd()}`);
+        console.log(`[Sync] Targets directory: ${TEMPLATES_DIR}`);
+
+        // Vercel 환경 디버깅을 위한 추가 정보
+        const debugInfo = {
+            cwd: process.cwd(),
+            dirExists: fs.existsSync(TEMPLATES_DIR),
+            parentContents: fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : [],
+            publicExists: fs.existsSync(path.join(process.cwd(), 'public')),
+            publicContents: fs.existsSync(path.join(process.cwd(), 'public')) ? fs.readdirSync(path.join(process.cwd(), 'public')) : []
+        };
+
         if (!fs.existsSync(TEMPLATES_DIR)) {
-            return NextResponse.json({ error: "Templates directory not found" }, { status: 404 });
+            console.error(`[Sync] Directory NOT FOUND: ${TEMPLATES_DIR}`, debugInfo);
+            return NextResponse.json({
+                error: `Templates directory not found`,
+                debug: debugInfo
+            }, { status: 404 });
         }
 
-        const files = fs.readdirSync(TEMPLATES_DIR).filter(f => f.toLowerCase().endsWith('.json'));
+        const allFiles = fs.readdirSync(TEMPLATES_DIR);
+        console.log(`[Sync] All files in directory:`, allFiles);
+
+        const files = allFiles.filter(f => f.toLowerCase().endsWith('.json'));
+        console.log(`[Sync] Filtered JSON files:`, files);
+
         const results = [];
 
         // 헬퍼 함수 1: 재귀적 슬롯 검색
@@ -67,12 +88,20 @@ export async function POST(req: NextRequest) {
             return Object.values(textMap);
         };
 
+        if (files.length === 0) {
+            console.warn(`[Sync] No JSON files detected in ${TEMPLATES_DIR}`);
+        }
+
         for (const file of files) {
             const filePath = path.join(TEMPLATES_DIR, file);
             const templateId = file.replace('.json', '');
+            console.log(`[Sync] Processing file: ${file} (ID: ${templateId})`);
 
             try {
-                const lottieJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                const fileContent = fs.readFileSync(filePath, 'utf8');
+                console.log(`[Sync] File read success: ${file} (${fileContent.length} chars)`);
+
+                const lottieJson = JSON.parse(fileContent);
 
                 // 씬 컨테이너 찾기 (scene_all 등)
                 let sceneFolderComp = lottieJson.assets.find((a: any) =>
@@ -89,14 +118,18 @@ export async function POST(req: NextRequest) {
                 }
 
                 if (!sceneFolderComp) {
+                    console.log(`[Sync] '${file}': No standard scene container. Trying fallback.`);
                     // 차선책: 레이어 수가 많은 컴포지션을 씬 폴더로 추측
                     sceneFolderComp = lottieJson.assets.find((a: any) => a.layers && a.layers.length >= 30);
                 }
 
                 if (!sceneFolderComp) {
+                    console.error(`[Sync] '${file}': FAILED to find scene container.`);
                     results.push({ file, status: 'skipped', message: 'Could not find any scene container composition' });
                     continue;
                 }
+
+                console.log(`[Sync] '${file}': Found scene container: "${sceneFolderComp.nm}"`);
 
                 const rawScenes: any[] = [];
                 sceneFolderComp.layers.forEach((layer: any) => {
@@ -115,6 +148,7 @@ export async function POST(req: NextRequest) {
                     }
                 });
 
+                console.log(`[Sync] '${file}': Extracted ${rawScenes.length} raw scenes.`);
                 rawScenes.sort((a, b) => a.num - b.num);
 
                 const scenes: any[] = [];
@@ -165,24 +199,30 @@ export async function POST(req: NextRequest) {
                     updated_at: new Date().toISOString()
                 };
 
+                console.log(`[Sync] '${file}': Upserting to Database...`);
                 const { error: upsertError } = await supabase
                     .from('templates')
                     .upsert(templateData);
 
                 if (upsertError) {
+                    console.error(`[Sync] '${file}': Database Upsert FAILED:`, upsertError.message);
                     results.push({ file, status: 'error', message: upsertError.message });
                 } else {
+                    console.log(`[Sync] '${file}': Sync SUCCESS. (${scenes.length} scenes)`);
                     results.push({ file, status: 'success', sceneCount: scenes.length });
                 }
 
             } catch (e: any) {
+                console.error(`[Sync] '${file}': UNEXPECTED ERROR:`, e.message);
                 results.push({ file, status: 'error', message: e.message });
             }
         }
 
         const anyError = results.some(r => r.status === 'error');
+        console.log(`[Sync] All done. Errors: ${anyError}, Results count: ${results.length}`);
         return NextResponse.json({ success: !anyError, results }, { status: anyError ? 400 : 200 });
     } catch (error: any) {
+        console.error(`[Sync] FATAL ERROR:`, error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

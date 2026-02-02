@@ -1480,7 +1480,8 @@ export default function App() {
                           getTemplates().then(setTemplates);
                         } else {
                           const errorMsg = data.results?.find((r: any) => r.status === 'error')?.message || data.error || '알 수 없는 오류';
-                          alert(`동기화 실패: ${errorMsg}`);
+                          const debugStr = data.debug ? `\n\nDebug Info: ${JSON.stringify(data.debug)}` : '';
+                          alert(`동기화 실패: ${errorMsg}${debugStr}`);
                         }
                       } catch (e) {
                         alert('오류 발생');
