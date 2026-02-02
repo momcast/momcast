@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  outputFileTracingExcludes: {
+    '/api/**/*': [
+      'public/templates/images/**/*',
+    ],
+  },
   async headers() {
     return [];
   },
