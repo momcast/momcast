@@ -19,6 +19,9 @@ interface Props {
     backgroundColor?: string;
 }
 
+/**
+ * 에셋 경로 정규화 (templates/images 폴더 참조)
+ */
 function normalizeAssetPath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
@@ -27,42 +30,46 @@ function normalizeAssetPath(p: string): string {
 }
 
 /**
- * MASTER MATCHING ENGINE v2: Powerful cross-reference search.
+ * 씬 매칭 엔진 (원복 및 강화):
+ * ID 매칭을 최우선으로 하여 씬이 안 나오는 문제를 근본적으로 해결합니다.
  */
 function findSceneComp(template: any, sceneId: string) {
     if (!template || !sceneId) return null;
     const assets = template.assets || [];
+
+    // 1. [최우선] ID 직접 매칭 (가장 확실함)
+    let found = assets.find(a => a.id === sceneId);
+    if (found) return found;
+
+    // 2. 이름(nm) 정밀 매칭 (대소문자 무시)
+    const lowerId = sceneId.toLowerCase();
+    found = assets.find(a => a.nm && a.nm.toLowerCase() === lowerId);
+    if (found) return found;
+
+    // 3. 레이어 기반 매칭 (Scene 01 등 이름으로 찾기)
     const layers = template.layers || [];
-
-    const searchId = String(sceneId).toLowerCase();
-    const cleanSearch = searchId.replace(/[^0-9]/g, ''); // Extract numbers (e.g. "20")
-
-    // 1. Root Layers direct/fuzzy match
-    const rootLayer = layers.find(l => {
-        const ln = (l.nm || "").toLowerCase();
-        return ln === searchId || ln.includes(searchId) || (cleanSearch && ln.includes(cleanSearch) && ln.includes('scene'));
-    });
+    const rootLayer = layers.find(l => (l.nm || "").toLowerCase().includes(lowerId));
     if (rootLayer?.refId) {
         const asset = assets.find(a => a.id === rootLayer.refId);
         if (asset) return asset;
     }
 
-    // 2. Search in Master Comp (comp_0)
+    // 4. 마스터 컴포지션(comp_0) 레이어 뒤지기
     const comp0 = assets.find(a => a.id === 'comp_0');
     if (comp0?.layers) {
-        const ml = comp0.layers.find(l => {
-            const ln = (l.nm || "").toLowerCase();
-            return ln === searchId || ln.includes(searchId) || (cleanSearch && ln.includes(cleanSearch) && ln.includes('scene'));
-        });
+        const ml = comp0.layers.find(l => (l.nm || "").toLowerCase().includes(lowerId));
         if (ml?.refId) {
             const asset = assets.find(a => a.id === ml.refId);
             if (asset) return asset;
         }
     }
 
-    // 3. Asset Name direct match
-    const assetByName = assets.find(a => a.nm && a.nm.toLowerCase().includes(searchId));
-    if (assetByName) return assetByName;
+    // 5. 숫자로만 검색 (예: 20번 씬 -> "20" 포함된 에셋)
+    const cleanNum = sceneId.replace(/[^0-9]/g, '');
+    if (cleanNum) {
+        found = assets.find(a => a.nm && a.nm.includes(cleanNum) && (a.nm.includes('Scene') || a.nm.includes('씬')));
+        if (found) return found;
+    }
 
     return null;
 }
@@ -71,19 +78,18 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     fullTemplate, sceneId, slots,
     userImages = {}, userTexts = {},
     width, height, previewFrame = 0,
-    className = "", backgroundMode = 'transparent', backgroundColor = '#ffffff',
-    isEditor = false
+    className = "", backgroundMode = 'transparent', backgroundColor = '#ffffff'
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
     const [isInView, setIsInView] = useState(false);
-    const [debugInfo, setDebugInfo] = useState<{ scene: string, comp: string, assets: number } | null>(null);
 
+    // 뷰포트 감지 (성능 최적화)
     useEffect(() => {
         if (!containerRef.current) return;
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) setIsInView(true);
-        }, { threshold: 0.01, rootMargin: '400px' });
+        }, { threshold: 0.1, rootMargin: '400px' });
         observer.observe(containerRef.current);
         return () => observer.disconnect();
     }, []);
@@ -93,17 +99,17 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         try {
             const targetComp = findSceneComp(fullTemplate, sceneId);
             if (!targetComp) {
-                console.warn(`[LottiePreview] Scene "${sceneId}" not found.`);
+                console.warn(`[LottiePreview] 매칭 실패: ${sceneId}`);
                 return null;
             }
 
-            // Simple Pruning for Speed & Reliability
+            // [최적화] 필요한 에셋만 추출 (Deep Collection)
             const allAssets = fullTemplate.assets || [];
             const usedIds = new Set<string>();
             const collect = (id: string) => {
                 if (usedIds.has(id)) return;
                 const asset = allAssets.find((a: any) => a.id === id);
-                if (!asset) return;
+                if (!asset || usedIds.has(id)) return;
                 usedIds.add(id);
                 if (asset.layers) asset.layers.forEach((l: any) => l.refId && collect(l.refId));
             };
@@ -115,7 +121,6 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 return copy;
             });
 
-            // Content Injection
             const finalJson = {
                 v: fullTemplate.v, fr: fullTemplate.fr, ip: 0,
                 op: targetComp.op || 300, w: targetComp.w || fullTemplate.w, h: targetComp.h || fullTemplate.h,
@@ -123,7 +128,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 layers: JSON.parse(JSON.stringify(targetComp.layers || []))
             };
 
-            // Deep Injection
+            // [주입] 사진/텍스트 교체
             const inject = (compId: string, url: string) => {
                 const asset = finalJson.assets.find((a: any) => a.id === compId);
                 if (!asset?.layers) return;
@@ -142,10 +147,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 asset?.layers?.forEach((l: any) => { if (l.ty === 5 && l.t?.d?.k) l.t.d.k[0].s.t = txt; });
             });
 
-            setDebugInfo({ scene: sceneId, comp: targetComp.id, assets: prunedAssets.length });
             return finalJson;
         } catch (e) {
-            console.error(`[LottiePreview] Logic Error [${sceneId}]:`, e);
+            console.error(`[LottiePreview] 매칭 로직 에러 [${sceneId}]:`, e);
             return null;
         }
     }, [fullTemplate, sceneId, slots, userImages, userTexts, isInView]);
@@ -169,7 +173,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 const svg = containerRef.current?.querySelector('svg');
                 if (svg) svg.querySelectorAll('image').forEach(i => i.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
-        } catch (e) { console.error(`[LottiePreview] Lottie Error:`, e); }
+        } catch (e) { console.error(`[LottiePreview] 렌더링 에러:`, e); }
         return () => { if (instance) instance.destroy(); };
     }, [processedJson, previewFrame]);
 
@@ -182,12 +186,6 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             <div ref={containerRef} className="relative"
                 style={{ width: isV ? 'auto' : '100%', height: isV ? '100%' : 'auto', aspectRatio: `${dW}/${dH}`, maxWidth: '100%', maxHeight: '100%' }}
             >
-                {/* DEBUG OVERLAY (Only visible in dev) */}
-                {debugInfo && (
-                    <div className="absolute top-1 left-1 bg-black/50 text-[8px] text-white p-1 rounded font-mono pointer-events-none z-50">
-                        {debugInfo.scene} -> {debugInfo.comp} ({debugInfo.assets} assets)
-                    </div>
-                )}
                 {!processedJson && isInView && <div className="absolute inset-0 flex items-center justify-center text-[10px] text-gray-400">LOADING...</div>}
             </div>
         </div>
