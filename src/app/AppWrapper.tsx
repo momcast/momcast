@@ -148,6 +148,8 @@ const ScenePreview: React.FC<{
           width={width}
           height={height}
           previewFrame={isAdmin ? (scene as AdminScene).previewFrame : adminConfig?.previewFrame}
+          backgroundMode={displayScene.backgroundMode}
+          backgroundColor={displayScene.backgroundColor}
           className="absolute inset-0 z-0"
         />
       ) : (
@@ -610,7 +612,7 @@ const SceneEditor: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center overflow-hidden">
-      <div className="bg-white w-full h-full max-w-[640px] md:h-[95vh] md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative border border-gray-100 animate-in fade-in zoom-in-95 duration-300">
+      <div className="bg-white w-full h-full max-w-[1240px] md:h-[95vh] md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative border border-gray-100 animate-in fade-in zoom-in-95 duration-300">
 
         {/* 1. Header (Scene Info) */}
         <header className="flex justify-between items-start px-8 pt-6 pb-2 bg-white shrink-0">
@@ -712,10 +714,9 @@ const SceneEditor: React.FC<{
         >
           <div
             ref={viewportRef}
-            className={`w-full max-w-2xl relative overflow-hidden bg-transparent shadow-2xl rounded-xl transition-transform duration-500`}
+            className={`w-full max-w-4xl relative overflow-hidden bg-transparent shadow-[0_40px_100px_-20px_rgba(0,0,0,0.2)] rounded-2xl transition-all duration-500`}
             style={{
               aspectRatio: `${width || 1920} / ${height || 1080}`,
-              boxShadow: '0 30px 60px -12px rgba(50,50,93,0.1), 0 18px 36px -18px rgba(0,0,0,0.15)'
             }}
             onPointerDown={handleViewportPointerDown}
             onPointerMove={handlePointerMove}

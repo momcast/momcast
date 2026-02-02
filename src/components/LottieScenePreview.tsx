@@ -14,7 +14,9 @@ interface Props {
     height?: number;
     previewFrame?: number;
     className?: string;
-    isEditor?: boolean; // If true, might apply different scaling/fitting
+    isEditor?: boolean;
+    backgroundMode?: 'transparent' | 'solid' | 'blur';
+    backgroundColor?: string;
 }
 
 /**
@@ -63,7 +65,14 @@ function extractSceneLottie(fullTemplate: any, sceneCompId: string): any {
 /**
  * Injects user content into the Lottie JSON assets
  */
-function injectContent(lottieJson: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
+function injectContent(
+    lottieJson: any,
+    slots: SceneSlots | undefined,
+    userImages: Record<string, string>,
+    userTexts: Record<string, string>,
+    backgroundMode?: 'transparent' | 'solid' | 'blur',
+    backgroundColor?: string
+) {
     if (!lottieJson) return null;
     const copy = JSON.parse(JSON.stringify(lottieJson));
 
@@ -102,6 +111,69 @@ function injectContent(lottieJson: any, slots: SceneSlots | undefined, userImage
         });
     });
 
+    // 3. Background injection
+    if (copy.assets && (backgroundColor || backgroundMode === 'blur')) {
+        // 이미 주입된 배경이 있는지 확인 (중복 방지 - nm 속성 관례)
+        if (!copy.layers.find((l: any) => l.nm === '___MOMCAST_BG___')) {
+            const bgLayer: any = {
+                nm: '___MOMCAST_BG___',
+                ty: 1, // Solid
+                sw: copy.w,
+                sh: copy.h,
+                sc: backgroundColor || '#ffffff',
+                ks: {
+                    o: { a: 0, k: 100 },
+                    r: { a: 0, k: 0 },
+                    p: { a: 0, k: [copy.w / 2, copy.h / 2] },
+                    a: { a: 0, k: [copy.w / 2, copy.h / 2] },
+                    s: { a: 0, k: [100, 100] }
+                },
+                ip: 0,
+                op: 9999,
+                st: 0,
+                bm: 0
+            };
+
+            if (backgroundMode === 'blur') {
+                // 블러 모드: 첫 번째 이미지 슬롯을 배경 이미지로 재활용
+                const firstPhoto = slots.photos?.[0];
+                const firstImgUrl = firstPhoto ? userImages[firstPhoto.id] : null;
+
+                if (firstImgUrl) {
+                    bgLayer.ty = 2; // Image layer
+                    const blurAssetId = 'asset_blur_bg';
+                    // 에셋 리스트에 블러용 이미지 원본 등록
+                    if (!copy.assets.find((a: any) => a.id === blurAssetId)) {
+                        copy.assets.push({
+                            id: blurAssetId,
+                            w: copy.w,
+                            h: copy.h,
+                            u: '',
+                            p: firstImgUrl,
+                            e: 0
+                        });
+                    }
+                    bgLayer.refId = blurAssetId;
+
+                    // 가우시안 블러 효과 주입
+                    bgLayer.ef = [{
+                        ty: 29, // Gaussian Blur
+                        nm: '가우시안 흐림',
+                        mn: 'ADBE Gaussian Blur 2',
+                        en: 1,
+                        ef: [
+                            { ty: 0, nm: '흐림', mn: 'ADBE Gaussian Blur 2-0001', v: { a: 0, k: 60 } },
+                            { ty: 7, nm: '흐림 차원', mn: 'ADBE Gaussian Blur 2-0002', v: { a: 0, k: 1 } }
+                        ]
+                    }];
+                }
+            }
+
+            // 레이어 배열의 마지막에 추가하여 가장 아래 렌더링되게 함
+            copy.layers.push(bgLayer);
+        }
+    }
+
     return copy;
 }
 
@@ -115,7 +187,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     height = 1080,
     previewFrame = 0,
     className = "",
-    isEditor = false
+    isEditor = false,
+    backgroundMode = 'transparent',
+    backgroundColor = '#ffffff'
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
@@ -124,8 +198,8 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const processedJson = useMemo(() => {
         const extracted = extractSceneLottie(fullTemplate, sceneId);
         if (!extracted) return null;
-        return injectContent(extracted, slots, userImages, userTexts);
-    }, [fullTemplate, sceneId, slots, userImages, userTexts]);
+        return injectContent(extracted, slots, userImages, userTexts, backgroundMode, backgroundColor);
+    }, [fullTemplate, sceneId, slots, userImages, userTexts, backgroundMode, backgroundColor]);
 
     // 2. Load Animation
     useEffect(() => {
@@ -180,7 +254,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             ) : (
                 <div
                     ref={containerRef}
-                    className="relative bg-white"
+                    className="relative bg-transparent"
                     style={{
                         width: isVertical ? 'auto' : '100%',
                         height: isVertical ? '100%' : 'auto',
