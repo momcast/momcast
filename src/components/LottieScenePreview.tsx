@@ -20,108 +20,22 @@ interface Props {
 }
 
 /**
- * PATH NORMALIZER: Strips prefixes and ensures flat assets/images path.
+ * PATH NORMALIZER: Ensures assets are loaded correctly.
  */
-function normalizeAssetPath(p: string): string {
+function normalizePath(p: string): string {
     if (!p || typeof p !== 'string') return p;
     if (p.startsWith('http') || p.startsWith('data:') || p.startsWith('/')) return p;
-
-    // Get only filename (strips te-images/ etc.)
     const filename = p.split('/').pop() || p;
     return `/templates/images/${filename}`;
 }
 
 /**
- * RECURSIVE ASSET COLLECTOR
+ * DEEP INJECTOR: Replaced single match with forEach for multiple instances.
  */
-function collectAssets(compId: string, allAssets: any[], collected: Map<string, any>) {
-    if (collected.has(compId)) return;
-    const asset = allAssets.find(a => a.id === compId);
-    if (!asset) return;
-
-    collected.set(compId, asset);
-    if (asset.layers) {
-        asset.layers.forEach((l: any) => {
-            if (l.refId) collectAssets(l.refId, allAssets, collected);
-        });
-    }
-}
-
-/**
- * CONTEXTUAL RESOLVER: Extracts scene + its sibling background context.
- */
-function resolveContextualLottie(template: any, sceneId: string) {
-    if (!template || !sceneId) return null;
-
-    const assets = template.assets || [];
-    let targetLayer: any = null;
-    let parentNode: any = template; // can be template root or an asset
-
-    // 1. Find scene layer and its containing parent
-    const findInLayers = (layers: any[], parentContainer: any): boolean => {
-        for (const l of layers) {
-            if (l.refId === sceneId || (l.nm && l.nm.includes(sceneId))) {
-                targetLayer = l;
-                parentNode = parentContainer;
-                return true;
-            }
-            if (l.ty === 0 && l.refId) {
-                const sub = assets.find((a: any) => a.id === l.refId);
-                if (sub && sub.layers && findInLayers(sub.layers, sub)) return true;
-            }
-        }
-        return false;
-    };
-
-    findInLayers(template.layers, template);
-
-    if (!targetLayer) {
-        // Manual fallback if not found in hierarchy
-        const direct = assets.find((a: any) => a.id === sceneId);
-        if (!direct) return null;
-        targetLayer = { nm: sceneId, ty: 0, refId: sceneId, ip: 0, op: direct.op || 300, st: 0, ks: { p: { k: [template.w / 2, template.h / 2] }, a: { k: [template.w / 2, template.h / 2] }, s: { k: [100, 100] } } };
-    }
-
-    // 2. Identify context (siblings in the same container)
-    const layers = parentNode.layers || [];
-    const bgLayers = layers.filter((l: any) => {
-        const isOtherScene = l.nm && (l.nm.toLowerCase().includes('scene') || l.nm.toLowerCase().includes('씬')) && (l.refId !== sceneId && !l.nm.includes(sceneId));
-        // We take everything except other scenes that overlap in time
-        return l !== targetLayer && !isOtherScene && l.ip <= targetLayer.ip && l.op >= targetLayer.ip;
-    });
-
-    const finalLayers = [...bgLayers, targetLayer];
-    const usedAssets = new Map<string, any>();
-    finalLayers.forEach(l => {
-        if (l.refId) collectAssets(l.refId, assets, usedAssets);
-    });
-
-    // 3. Build optimized JSON
-    const sceneJson = {
-        ...template,
-        assets: Array.from(usedAssets.values()).map(a => {
-            if (a.p && !a.layers) return { ...a, p: normalizeAssetPath(a.p), u: '' };
-            return a;
-        }),
-        layers: JSON.parse(JSON.stringify(finalLayers)).map((l: any) => ({
-            ...l,
-            st: l.st - targetLayer.st,
-        })),
-        ip: 0,
-        op: (targetLayer.op || 300) - (targetLayer.ip || 0),
-        nm: `ContextExtract_${sceneId}`
-    };
-
-    return sceneJson;
-}
-
-/**
- * DEEP SLOT CONTENT INJECTION
- */
-function injectDeepSlotContent(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
+function injectContentDeep(json: any, slots: SceneSlots | undefined, userImages: Record<string, string>, userTexts: Record<string, string>) {
     if (!json || !slots) return json;
 
-    const injectImageToAsset = (compId: string, url: string) => {
+    const findAndInjectImage = (compId: string, url: string) => {
         const asset = json.assets.find((a: any) => a.id === compId);
         if (!asset) return;
         if (asset.layers) {
@@ -130,7 +44,7 @@ function injectDeepSlotContent(json: any, slots: SceneSlots | undefined, userIma
                     const imgAsset = json.assets.find((a: any) => a.id === l.refId);
                     if (imgAsset) { imgAsset.p = url; imgAsset.u = ''; }
                 } else if (l.ty === 0 && l.refId) {
-                    injectImageToAsset(l.refId, url);
+                    findAndInjectImage(l.refId, url);
                 }
             });
         }
@@ -138,7 +52,7 @@ function injectDeepSlotContent(json: any, slots: SceneSlots | undefined, userIma
 
     slots.photos?.forEach(slot => {
         const url = userImages[slot.id];
-        if (url) injectImageToAsset(slot.id, url);
+        if (url) findAndInjectImage(slot.id, url);
     });
 
     slots.texts?.forEach(slot => {
@@ -155,6 +69,44 @@ function injectDeepSlotContent(json: any, slots: SceneSlots | undefined, userIma
     return json;
 }
 
+/**
+ * PURE-COMP RESOLVER: 
+ * Directly uses the Scene Asset as the root. 
+ * This avoids buggy parent transitions (white lines) and shows the actual scene background.
+ */
+function resolvePureCompLottie(template: any, sceneId: string) {
+    if (!template || !sceneId) return null;
+
+    // Find the scene asset (the composition)
+    const sceneAsset = template.assets?.find((a: any) =>
+        a.id === sceneId || (a.nm && a.nm.toLowerCase() === sceneId.toLowerCase())
+    );
+
+    if (!sceneAsset || !sceneAsset.layers) return null;
+
+    // Create a lean version of the template using the scene's layers
+    const finalJson = {
+        ...template,
+        v: template.v,
+        fr: template.fr,
+        w: Number(sceneAsset.w) || template.w,
+        h: Number(sceneAsset.h) || template.h,
+        assets: (template.assets || []).map((a: any) => {
+            if (a.p && !a.layers) return { ...a, p: normalizePath(a.p), u: '' };
+            return a;
+        }),
+        layers: JSON.parse(JSON.stringify(sceneAsset.layers)).map((l: any) => ({
+            ...l,
+            // st: 0, // Keep internal st as is, but usually it's fine
+        })),
+        ip: 0,
+        op: sceneAsset.op || 300,
+        nm: `Pure_${sceneId}`
+    };
+
+    return finalJson;
+}
+
 export const LottieScenePreview: React.FC<Props> = React.memo(({
     fullTemplate, sceneId, slots,
     userImages = {}, userTexts = {},
@@ -165,9 +117,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     const animRef = useRef<AnimationItem | null>(null);
 
     const processedJson = useMemo(() => {
-        const contextual = resolveContextualLottie(fullTemplate, sceneId);
-        if (!contextual) return null;
-        return injectDeepSlotContent(contextual, slots, userImages, userTexts);
+        const pure = resolvePureCompLottie(fullTemplate, sceneId);
+        if (!pure) return null;
+        return injectContentDeep(pure, slots, userImages, userTexts);
     }, [fullTemplate, sceneId, slots, userImages, userTexts]);
 
     useEffect(() => {
@@ -177,7 +129,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         try {
             const anim = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: 'svg', loop: false, autoplay: false,
+                renderer: 'svg',
+                loop: false,
+                autoplay: false,
                 animationData: processedJson
             });
             animRef.current = anim;
@@ -188,19 +142,19 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
                 if (svg) svg.querySelectorAll('image').forEach(img => img.setAttribute('preserveAspectRatio', 'xMidYMid slice'));
             });
         } catch (e) {
-            console.error("[LottiePreview] Context Render Failure:", e);
+            console.error("[LottiePreview] Pure-Comp Render Failure:", e);
         }
         return () => animRef.current?.destroy();
     }, [processedJson, previewFrame]);
 
-    const displayW = fullTemplate?.w || width || 1920;
-    const displayH = fullTemplate?.h || height || 1080;
+    const displayW = processedJson?.w || fullTemplate?.w || width || 1920;
+    const displayH = processedJson?.h || fullTemplate?.h || height || 1080;
     const isVertical = displayH > displayW;
 
     return (
-        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden ${className}`}>
+        <div className={`relative w-full h-full flex items-center justify-center overflow-hidden bg-transparent ${className}`}>
             {!processedJson ? (
-                <div className="text-[10px] text-gray-400">Loading Context...</div>
+                <div className="text-[10px] text-gray-400">Loading Scene...</div>
             ) : (
                 <div
                     ref={containerRef}
