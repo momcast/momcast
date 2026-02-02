@@ -17,6 +17,7 @@ interface Props {
     isEditor?: boolean;
     backgroundMode?: 'transparent' | 'solid' | 'blur';
     backgroundColor?: string;
+    renderer?: 'svg' | 'canvas' | 'html';
 }
 
 /**
@@ -82,7 +83,8 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
     previewFrame = 0,
     backgroundMode = 'transparent',
     backgroundColor = '#ffffff',
-    className = ""
+    className = "",
+    renderer = 'canvas'
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animRef = useRef<AnimationItem | null>(null);
@@ -197,11 +199,12 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             if (animRef.current) { animRef.current.destroy(); animRef.current = null; }
             instance = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: 'svg',
+                renderer: renderer || 'canvas', // [최적화] SVG -> Canvas 전환 (성능 향상 및 마스킹 아티팩트/흰줄 제거)
                 loop: false, autoplay: false,
                 animationData: processedJson,
                 rendererSettings: {
-                    preserveAspectRatio: 'xMidYMid slice'
+                    preserveAspectRatio: 'xMidYMid slice',
+                    imagePreserveAspectRatio: 'xMidYMid slice'
                 }
             });
             animRef.current = instance;
