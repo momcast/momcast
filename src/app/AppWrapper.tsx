@@ -28,20 +28,20 @@ import { LottieScenePreview } from '../components/LottieScenePreview';
 
 
 const Icons = {
-  Change: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
-  Rotate: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
-  Crop: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 00-2 2v3m0 5v3a2 2 0 01-2 2h-3m-5 0H6a2 2 0 01-2-2v-3" /></svg>,
-  Close: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
-  Admin: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
-  Plus: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
-  Camera: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>,
-  Clock: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-  Logout: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
-  Undo: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
-  Trash: () => <svg className="w-4 h-4" pointerEvents="none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
-  Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
-  Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
-  ExternalLink: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
+  Change: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+  Rotate: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+  Crop: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 00-2 2v3m0 5v3a2 2 0 01-2 2h-3m-5 0H6a2 2 0 01-2-2v-3" /></svg>,
+  Close: ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
+  Admin: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+  Plus: ({ className = "w-6 h-6" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+  Camera: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>,
+  Clock: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+  Logout: ({ className = "w-5 h-5" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
+  Undo: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>,
+  Trash: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+  Edit: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+  Upload: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
+  ExternalLink: ({ className = "w-4 h-4" }) => <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
 };
 
 const STICKER_COUNT = 20;
@@ -134,7 +134,7 @@ const ScenePreview: React.FC<{
 
   return (
     <div
-      className={`relative overflow-hidden w-full ${className} bg-black flex items-center justify-center`}
+      className={`relative overflow-hidden w-full ${className} bg-transparent flex items-center justify-center`}
       style={{ aspectRatio: '16 / 9' }}
     >
       {/* 1. Lottie Background (If available) */}
@@ -152,16 +152,30 @@ const ScenePreview: React.FC<{
         />
       ) : (
         /* Fallback Legacy Rendering (CSS/Image) */
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-white"
+          style={{
+            backgroundColor: displayScene.backgroundMode === 'solid' ? displayScene.backgroundColor : '#ffffff',
+            backgroundImage: displayScene.backgroundMode === 'transparent' ? 'none' : undefined
+          }}
+        >
           {displayScene.backgroundMode === 'blur' && displayScene.userImageUrl && (
             <div className="absolute inset-0 scale-125 blur-3xl opacity-30 grayscale pointer-events-none" style={{ backgroundImage: `url(${displayScene.userImageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
           )}
-          {displayScene.userImageUrl && (
+          {displayScene.userImageUrl ? (
             <div
               className="w-full h-full relative"
-              style={{ aspectRatio: `${width}/${height}`, transform: `translate(${displayScene.position?.x || 0}%, ${displayScene.position?.y || 0}%) rotate(${displayScene.rotation || 0}deg) scale(${displayScene.zoom || 1})` }}
+              style={{
+                aspectRatio: `${width}/${height}`,
+                transform: `translate(${displayScene.position?.x || 0}%, ${displayScene.position?.y || 0}%) rotate(${displayScene.rotation || 0}deg) scale(${displayScene.zoom || 1})`
+              }}
             >
               <img src={displayScene.userImageUrl} className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 opacity-20">
+              <Icons.Change className="w-12 h-12" />
+              <span className="text-[10px] font-black uppercase tracking-widest">No Image</span>
             </div>
           )}
         </div>
@@ -595,416 +609,207 @@ const SceneEditor: React.FC<{
   const cropImageSrc = isAdminMode ? ((currentScene as AdminScene).overlayUrl || null) : (userPhotoUrl || null);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-0 md:p-6 lg:p-10 w-screen h-screen overflow-hidden">
-      <div className="bg-white w-full h-full md:h-[90vh] max-w-[1600px] md:rounded-[3rem] shadow-2xl flex flex-col md:flex-row overflow-hidden relative">
-        <div className="h-[45vh] md:h-full md:flex-1 flex flex-col min-h-0 relative bg-[#ebebeb] shrink-0 overflow-hidden">
-          <header className="flex justify-between items-center px-6 md:px-10 py-5 bg-white border-b border-gray-100 shrink-0 z-10">
-            <h3 className="text-xl font-black text-gray-900 tracking-tight italic">{isAdminMode ? '템플릿 설계' : '맘캐스트'}</h3>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-all text-gray-400 hover:text-gray-900"><Icons.Close /></button>
-          </header>
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center overflow-hidden">
+      <div className="bg-white w-full h-full max-w-[640px] md:h-[95vh] md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative border border-gray-100 animate-in fade-in zoom-in-95 duration-300">
 
-          <div className="flex-1 p-4 md:p-8 flex items-center justify-center relative overflow-hidden">
-            {/* Letterbox Wrapper for Vertical Scenes */}
-            {(height || 0) > (width || 0) ? (
-              <div className="w-full max-w-6xl max-h-[70vh] aspect-video bg-black rounded-2xl flex items-center justify-center shadow-2xl border border-gray-800">
-                <div
-                  ref={viewportRef}
-                  className={`relative overflow-hidden bg-white shadow-2xl touch-none select-none ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
-                  style={{
-                    height: '100%',
-                    aspectRatio: `${width || 1080} / ${height || 1920}`
-                  }}
-                  onPointerDown={handleViewportPointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                >
-                  <ScenePreview
-                    scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }}
-                    adminConfig={isAdminMode ? undefined : adminScene}
-                    isAdmin={isAdminMode}
-                    hideOverlay={!showGuideOverlay}
-                  />
+        {/* 1. Header (Scene Info) */}
+        <header className="flex justify-between items-start px-8 pt-6 pb-2 bg-white shrink-0">
+          <div className="space-y-1">
+            <h3 className="text-xl font-black text-gray-900 tracking-tight">{currentScene.name || `장면 ${currentScene.order || '??'}`}</h3>
+            <div className="flex items-center gap-3 text-[11px] font-medium text-gray-400">
+              <span className="flex items-center gap-1"><Icons.Clock /> {Math.round((lottieTemplate?.assets?.find((a: any) => a.id === currentScene.id)?.op || 120) / (lottieTemplate?.fr || 30))}초 재생</span>
+              <span className="flex items-center gap-1">🎵 가사 없음</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full transition-all text-gray-300 hover:text-gray-900">
+            <Icons.Close />
+          </button>
+        </header>
 
-                  {mode === 'camera' && (
-                    <div className="absolute inset-0 bg-black z-50">
-                      <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
-                      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
-                        <div onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 active:scale-95 transition-transform cursor-pointer"></div>
-                        <button onClick={() => { stopCamera(); setMode('edit'); }} className="px-6 py-2 bg-red-50 text-white rounded-full font-bold shadow-lg">취소</button>
-                      </div>
-                    </div>
-                  )}
+        {/* 2. Tool Row */}
+        <div className="px-8 flex items-center justify-between py-4 border-t border-gray-50 bg-white shrink-0 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => {
+                const slot = slots?.photos.find(s => s.id === activePhotoSlotId);
+                if (slot && !slot.isEditable && !isAdminMode) {
+                  alert('이 사진은 다른 씬과 공유되어 있어 이곳에서 수정할 수 없습니다.');
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
+              className="flex flex-col items-center gap-1.5 group"
+            >
+              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors"><Icons.Change /></div>
+              <span className="text-[10px] font-bold text-gray-600">변경</span>
+            </button>
+            <button
+              onClick={() => setCurrentScene((prev: any) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))}
+              className="flex flex-col items-center gap-1.5 group"
+            >
+              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors"><Icons.Rotate /></div>
+              <span className="text-[10px] font-bold text-gray-600">회전</span>
+            </button>
+            <button
+              onClick={() => setIsCropMode(!isCropMode)}
+              className={`flex flex-col items-center gap-1.5 group ${isCropMode ? 'text-[#ffb3a3]' : ''}`}
+            >
+              <div className={`p-3 rounded-xl transition-colors ${isCropMode ? 'bg-[#ffb3a3]/10' : 'bg-gray-50 group-hover:bg-gray-100'}`}><Icons.Crop /></div>
+              <span className="text-[10px] font-bold">영역</span>
+            </button>
+          </div>
 
-                  {/* Render Interactive Stickers Layer */}
-                  <div className="absolute inset-0 z-40 overflow-hidden pointer-events-none">
-                    {(currentScene.stickers || []).map((s: Sticker) => (
-                      <div key={s.id} className="pointer-events-auto">
-                        <StickerOverlay
-                          sticker={s}
-                          isSelected={selectedStickerId === s.id}
-                          onSelect={() => setSelectedStickerId(s.id)}
-                          onDelete={() => {
-                            setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, stickers: (prev.stickers || []).filter(st => st.id !== s.id) }));
-                            setSelectedStickerId(null);
-                          }}
-                          onUpdate={(updated) => {
-                            setCurrentScene((prev: AdminScene | UserScene) => ({
-                              ...prev,
-                              stickers: prev.stickers.map(st => st.id === s.id ? updated : st)
-                            }));
-                          }}
-                        />
-                      </div>
-                    ))}
+          <div className="w-[1px] h-10 bg-gray-100 mx-2" />
+
+          <div className="flex items-center gap-6">
+            <button
+              onClick={() => setCurrentScene((prev: any) => ({ ...prev, position: { x: 0, y: 0 } }))}
+              className="flex flex-col items-center gap-1.5 group"
+            >
+              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors"><Icons.Plus className="rotate-45" /></div>
+              <span className="text-[10px] font-bold text-gray-600">정렬</span>
+            </button>
+            <button className="flex flex-col items-center gap-1.5 group opacity-40">
+              <div className="p-3 bg-gray-50 rounded-xl"><Icons.Admin /></div>
+              <span className="text-[10px] font-bold text-gray-600">맞춤</span>
+            </button>
+            <button
+              onClick={() => {
+                const modes: ('transparent' | 'solid' | 'blur')[] = ['transparent', 'solid', 'blur'];
+                const next = modes[(modes.indexOf(currentScene.backgroundMode || 'transparent') + 1) % 3];
+                setCurrentScene((prev: any) => ({ ...prev, backgroundMode: next }));
+              }}
+              className="flex flex-col items-center gap-1.5 group"
+            >
+              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-gray-100 transition-colors">
+                <div className={`w-5 h-5 rounded-full border-2 ${currentScene.backgroundMode === 'solid' ? 'bg-black' : 'bg-white border-dashed'}`} />
+              </div>
+              <span className="text-[10px] font-bold text-gray-600">배경</span>
+            </button>
+          </div>
+
+          <div className="w-[1px] h-10 bg-gray-100 mx-2" />
+
+          <div className="flex items-center gap-4">
+            <button onClick={() => setCurrentScene((prev: any) => ({ ...prev, zoom: Math.max(0.5, prev.zoom - 0.2) }))} className="text-gray-300 hover:text-gray-900 transition-colors">축소</button>
+            <div className="relative w-24 h-6 flex items-center">
+              <input
+                type="range" min="0.5" max="4" step="0.1"
+                value={currentScene.zoom}
+                onChange={(e) => setCurrentScene((prev: any) => ({ ...prev, zoom: parseFloat(e.target.value) }))}
+                className="w-full accent-[#ffb3a3] cursor-pointer appearance-none bg-gray-100 h-1 rounded-full"
+              />
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-black text-[#ffb3a3]">{Math.round(currentScene.zoom * 100)}%</div>
+            </div>
+            <button onClick={() => setCurrentScene((prev: any) => ({ ...prev, zoom: Math.min(4, prev.zoom + 0.2) }))} className="text-gray-300 hover:text-gray-900 transition-colors">확대</button>
+          </div>
+        </div>
+
+        {/* 3. Main Stage (Preview) */}
+        <div
+          className="flex-1 bg-white relative flex items-center justify-center p-4 md:p-8 overflow-hidden"
+          style={transparencyGridStyle}
+        >
+          <div
+            ref={viewportRef}
+            className={`w-full max-w-2xl relative overflow-hidden bg-white shadow-2xl rounded-xl transition-transform duration-500`}
+            style={{
+              aspectRatio: `${width || 1920} / ${height || 1080}`,
+              boxShadow: '0 30px 60px -12px rgba(50,50,93,0.1), 0 18px 36px -18px rgba(0,0,0,0.15)'
+            }}
+            onPointerDown={handleViewportPointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+          >
+            <ScenePreview
+              scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }}
+              adminConfig={isAdminMode ? undefined : adminScene}
+              isAdmin={isAdminMode}
+              hideOverlay={!showGuideOverlay}
+              lottieTemplate={lottieTemplate}
+            />
+
+            {/* Crop Overlay */}
+            {isCropMode && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100/40 backdrop-blur-sm">
+                <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
+                  <div
+                    className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]"
+                    style={{
+                      top: `${crop.top}%`,
+                      left: `${crop.left}%`,
+                      right: `${crop.right}%`,
+                      bottom: `${crop.bottom}%`
+                    }}
+                  >
+                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white px-3 py-1 rounded-full text-[10px] font-black shadow-lg">영역 조절 중</div>
                   </div>
-
-                  {isCropMode && (
-                    <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100">
-                      {cropImageSrc && (
-                        <img src={cropImageSrc} alt="Image to crop" className="w-full h-full object-contain pointer-events-none select-none" />
-                      )}
-                      <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
-                        <div
-                          className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
-                          style={{
-                            top: `${crop.top}%`,
-                            left: `${crop.left}%`,
-                            right: `${crop.right}%`,
-                            bottom: `${crop.bottom}%`
-                          }}
-                        >
-                          {['topleft', 'topright', 'bottomleft', 'bottomright'].map(dir => (
-                            <div key={dir} onPointerDown={(e) => handleCropDrag(e, dir)} className={`absolute ${dir.includes('top') ? 'top-0' : 'bottom-0'} ${dir.includes('left') ? 'left-0' : 'right-0'} w-12 h-12 pointer-events-auto cursor-pointer flex items-center justify-center -m-6`}>
-                              <div className="w-6 h-6 border-4 border-[#ffb3a3] bg-white rounded-full shadow-xl" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="absolute bottom-10 z-[70] flex gap-4 pointer-events-auto">
-                        <button onClick={() => setIsCropMode(false)} className="px-6 py-3 bg-gray-900 text-white rounded-full font-bold shadow-xl active:scale-95">완료</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
-            ) : (
-              // Original Code for Horizontal Scenes
-              <div
-                ref={viewportRef}
-                className={`w-full max-w-4xl relative overflow-hidden bg-white shadow-2xl rounded-2xl touch-none select-none border border-gray-200 ${mode === 'decorate' && isBrushActive ? 'cursor-crosshair' : 'cursor-default'}`}
-                style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}
-                onPointerDown={handleViewportPointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-              >
-                <ScenePreview
-                  scene={{ ...currentScene, isEditing: true, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }} // Pass flag to hide static stickers relative to ScenePreview
-                  adminConfig={isAdminMode ? undefined : adminScene}
-                  isAdmin={isAdminMode}
-                  hideOverlay={!showGuideOverlay}
-                  lottieTemplate={lottieTemplate}
-                />
+            )}
 
-                {mode === 'camera' && (
-                  <div className="absolute inset-0 bg-black z-50">
-                    <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline />
-                    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
-                      <div onClick={capturePhoto} className="w-16 h-16 bg-white rounded-full border-4 border-gray-300 active:scale-95 transition-transform cursor-pointer"></div>
-                      <button onClick={() => { stopCamera(); setMode('edit'); }} className="px-6 py-2 bg-red-50 text-white rounded-full font-bold shadow-lg">취소</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Render Interactive Stickers Layer */}
-                <div className="absolute inset-0 z-40 overflow-hidden pointer-events-none">
-                  {(currentScene.stickers || []).map((s: Sticker) => (
-                    <div key={s.id} className="pointer-events-auto">
-                      <StickerOverlay
-                        sticker={s}
-                        isSelected={selectedStickerId === s.id}
-                        onSelect={() => setSelectedStickerId(s.id)}
-                        onDelete={() => {
-                          setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, stickers: (prev.stickers || []).filter(st => st.id !== s.id) }));
-                          setSelectedStickerId(null);
-                        }}
-                        onUpdate={(updated) => {
-                          setCurrentScene((prev: AdminScene | UserScene) => ({
-                            ...prev,
-                            stickers: prev.stickers.map(st => st.id === s.id ? updated : st)
-                          }));
-                        }}
-                      />
-                    </div>
-                  ))}
+            {isUploading && (
+              <div className="absolute inset-0 bg-white/60 flex items-center justify-center z-[100] backdrop-blur-md">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-4 border-[#ffb3a3] border-t-transparent rounded-full animate-spin" />
+                  <span className="font-black text-[10px] uppercase tracking-widest text-[#ffb3a3]">Processing...</span>
                 </div>
-
-                {isCropMode && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center p-2 bg-gray-100">
-                    {cropImageSrc && (
-                      <img src={cropImageSrc} alt="Image to crop" className="w-full h-full object-contain pointer-events-none select-none" />
-                    )}
-                    <div className="absolute inset-0 z-[60] pointer-events-none overflow-hidden">
-                      <div
-                        className="absolute border-4 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
-                        style={{
-                          top: `${crop.top}%`,
-                          left: `${crop.left}%`,
-                          right: `${crop.right}%`,
-                          bottom: `${crop.bottom}%`
-                        }}
-                      >
-                        {['topleft', 'topright', 'bottomleft', 'bottomright'].map(dir => (
-                          <div key={dir} onPointerDown={(e) => handleCropDrag(e, dir)} className={`absolute ${dir.includes('top') ? 'top-0' : 'bottom-0'} ${dir.includes('left') ? 'left-0' : 'right-0'} w-12 h-12 pointer-events-auto cursor-pointer flex items-center justify-center -m-6`}>
-                            <div className="w-6 h-6 border-4 border-[#ffb3a3] bg-white rounded-full shadow-xl" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {isUploading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-[100] backdrop-blur-sm"><span className="animate-pulse font-black text-xs uppercase tracking-widest text-[#ffb3a3]">사진 처리 중...</span></div>}
               </div>
             )}
           </div>
         </div>
 
-        <aside className="flex-1 md:w-[420px] bg-white border-l border-gray-100 flex flex-col min-h-0 shrink-0 relative overflow-hidden">
-          {/* 템플릿 합성 미리보기 */}
-          <div className="m-4 md:m-6 mb-0 shrink-0">
-            <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-3 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider">최종 미리보기</span>
-                <span className="text-[8px] text-gray-400">템플릿 적용 결과</span>
-              </div>
-              <div className="bg-white rounded-lg overflow-hidden shadow-md border border-gray-200" style={{ aspectRatio: `${width || 1920} / ${height || 1080}` }}>
-                <ScenePreview
-                  scene={{ ...currentScene, width, height, content: (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content) }}
-                  adminConfig={isAdminMode ? undefined : adminScene}
-                  isAdmin={isAdminMode}
-                  hideOverlay={false}
+        {/* 4. Text Input Area */}
+        <div className="px-8 pb-32 pt-4 bg-white border-t border-gray-50 flex flex-col gap-4">
+          {slots && slots.texts.length > 0 ? (
+            slots.texts.map(slot => (
+              <div key={slot.id} className="w-full">
+                <div className="flex justify-between items-center mb-2 px-1">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-tight">{slot.name}</span>
+                  {!slot.isEditable && !isAdminMode && <span className="text-[8px] bg-red-50 text-red-400 px-2 py-0.5 rounded font-black">이전 장면에서 연동됨</span>}
+                </div>
+                <textarea
+                  disabled={!slot.isEditable && !isAdminMode}
+                  className={`w-full p-6 text-center text-lg md:text-xl font-medium border border-gray-100 rounded-2xl bg-gray-50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all outline-none resize-none h-24 ${!slot.isEditable && !isAdminMode ? 'opacity-40 select-none' : ''}`}
+                  value={(currentScene as UserScene).slotTexts?.[slot.id] || (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content)}
+                  onChange={(e) => handleTextChangeForSlot(slot.id, e.target.value)}
+                  placeholder="내용을 입력해주세요"
                 />
               </div>
-            </div>
-          </div>
+            ))
+          ) : (
+            <textarea
+              className="w-full p-6 text-center text-lg md:text-xl font-medium border border-gray-100 rounded-2xl bg-gray-50 hover:bg-white focus:bg-white focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all outline-none resize-none h-28"
+              value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
+              onChange={(e) => setCurrentScene((prev: any) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }))}
+              placeholder="내용을 입력해주세요"
+            />
+          )}
+        </div>
 
-          <div className="flex bg-gray-100 p-2 m-4 md:m-6 rounded-2xl shadow-inner border border-gray-50 shrink-0">
-            <button
-              onClick={() => { setMode('edit'); setIsCropMode(false); }}
-              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'edit' && !isCropMode ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}
-            >
-              사진 편집
-            </button>
-            {(isAdminMode || canDecorate) && (
-              <button
-                onClick={() => {
-                  setMode('decorate');
-                  setIsCropMode(false);
-                }}
-                className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${mode === 'decorate' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-400'}`}
-              >
-                꾸미기
-              </button>
-            )}
-            <button
-              onClick={() => setShowGuideOverlay(!showGuideOverlay)}
-              className={`flex-1 py-3 md:py-3.5 rounded-xl text-[10px] font-black uppercase transition-all ${!showGuideOverlay ? 'bg-[#ffb3a3] text-white shadow-md' : 'text-gray-400'}`}
-            >
-              결과 보기
-            </button>
-          </div>
+        {/* 5. Fixed Bottom Action */}
+        <div className="absolute bottom-0 left-0 right-0 p-8 bg-white/80 backdrop-blur-sm z-20">
+          <button
+            onClick={() => {
+              const sceneToSave = isAdminMode ? currentScene : { ...currentScene, overlayUrl: undefined };
+              onSave(sceneToSave);
+            }}
+            className="w-full py-5 bg-[#ffb3a3] text-white font-black rounded-3xl text-lg shadow-xl hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all"
+          >
+            확인
+          </button>
+        </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar px-6 space-y-8 pb-32">
-            {mode === 'edit' && (
-              <div className="space-y-8">
-                {/* Photo Slots Selector & Actions */}
-                <div className="space-y-4">
-                  <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                    {slots?.photos.map(slot => (
-                      <button
-                        key={slot.id}
-                        onClick={() => setActivePhotoSlotId(slot.id)}
-                        className={`px-4 py-2 rounded-full whitespace-nowrap text-[9px] font-black uppercase transition-all border-2 ${activePhotoSlotId === slot.id ? 'border-gray-900 bg-gray-900 text-white shadow-lg' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'}`}
-                      >
-                        {slot.name} {!slot.isEditable && '🔒'}
-                      </button>
-                    ))}
-                  </div>
-
-                  {canUpload && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <button
-                        onClick={() => {
-                          const slot = slots?.photos.find(s => s.id === activePhotoSlotId);
-                          if (slot && !slot.isEditable && !isAdminMode) {
-                            alert('이 사진은 다른 씬과 공유되어 있어 이곳에서 수정할 수 없습니다.');
-                            return;
-                          }
-                          fileInputRef.current?.click();
-                        }}
-                        className={`py-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all ${slots?.photos.find(s => s.id === activePhotoSlotId)?.isEditable === false && !isAdminMode ? 'opacity-30 grayscale' : ''}`}
-                      >
-                        <Icons.Change /> {isAdminMode ? '파일 교체' : '사진 교체'}
-                      </button>
-                      <button onClick={startCamera} className="py-4 bg-white border border-gray-200 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 active:scale-95 transition-all"><Icons.Camera /> 카메라</button>
-                    </div>
-                  )}
-                  <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file && activePhotoSlotId) handleFileChangeForSlot(activePhotoSlotId, file);
-                  }} />
-                </div>
-
-                {canUpload && (
-                  <div className="space-y-4">
-                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">배경 모드</span>
-                    <div className="flex gap-2">
-                      {['transparent', 'solid', 'blur'].map(b => (
-                        <button key={b} onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, backgroundMode: b as 'transparent' | 'solid' | 'blur' }))} className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${currentScene.backgroundMode === b ? 'border-gray-900 bg-white shadow-sm text-gray-900' : 'border-gray-50 bg-gray-50 text-gray-400 hover:bg-white'}`}>{b === 'transparent' ? '투명' : b === 'solid' ? '색상' : '블러'}</button>
-                      ))}
-                    </div>
-                    {currentScene.backgroundMode === 'solid' && <ColorPickerRainbow currentColor={currentScene.backgroundColor} onColorChange={c => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, backgroundColor: c }))} />}
-                  </div>
-                )}
-                {canUpload && (
-                  <div className="space-y-6 border-t pt-8 border-gray-100">
-                    <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">이미지 변형</span>
-                    <div className="flex gap-4">
-                      <button onClick={() => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, rotation: (prev.rotation + 90) % 360 }))} className="flex-1 py-4 bg-white border border-gray-100 rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 active:bg-gray-100 transition-colors shadow-sm"><Icons.Rotate /> 회전</button>
-                      <button onClick={() => setIsCropMode(!isCropMode)} className={`flex-1 py-4 border rounded-2xl text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isCropMode ? 'bg-[#ffb3a3] text-white border-[#ffb3a3] shadow-lg' : 'bg-white border-gray-100 hover:bg-gray-50'}`}><Icons.Crop /> {isCropMode ? '완료' : '자르기'}</button>
-                    </div>
-                    <div className={`space-y-4 bg-gray-50 p-6 rounded-3xl border border-gray-100 transition-opacity ${isCropMode ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-                      <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>확대 / 축소</span><span>{Math.round(currentScene.zoom * 100)}%</span></div>
-                      <input type="range" min="0.5" max="4" step="0.1" value={currentScene.zoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, zoom: parseFloat(e.target.value) }))} className="w-full accent-[#ffb3a3] h-2 rounded-full cursor-pointer appearance-none bg-gray-200" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {mode === 'decorate' && (
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-gray-400">브러시 설정</span>
-                    {!isBrushActive && <span className="text-[8px] font-black text-red-500 uppercase animate-pulse">색상을 선택하세요</span>}
-                  </div>
-                  <ColorPickerRainbow currentColor={penColor} onColorChange={(c: string) => { setPenColor(c); setIsBrushActive(true); }} />
-                  <div className={`flex items-center gap-5 bg-gray-50 p-6 rounded-3xl shadow-inner border border-gray-100 transition-opacity ${!isBrushActive ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-                    <div className="flex-1 space-y-4">
-                      <div className="flex justify-between text-[9px] font-black uppercase text-gray-500"><span>두께</span><span>{penWidth}px</span></div>
-                      <input type="range" min="1" max="30" value={penWidth} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPenWidth(parseInt(e.target.value))} className="w-full accent-gray-900 h-2 rounded-full cursor-pointer bg-gray-200 appearance-none" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2">
-                    <button onClick={handleUndo} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-white border border-gray-100 rounded-2xl hover:bg-gray-50 transition-all text-gray-500 font-black text-[9px] uppercase shadow-sm"><Icons.Undo /> 되돌리기</button>
-                    <button onClick={handleClearDrawings} className="flex flex-col items-center justify-center gap-1.5 py-4 bg-white border border-gray-100 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-all text-gray-500 font-black text-[9px] uppercase shadow-sm"><Icons.Trash /> 전체 삭제</button>
-                    <button onClick={() => setIsBrushActive(false)} className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl font-black text-[9px] uppercase transition-all shadow-md ${isBrushActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-300'}`}>완료</button>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <span className="text-[10px] font-black uppercase text-gray-400">스티커 팩</span>
-                  <div className="grid grid-cols-6 gap-2 p-3 bg-gray-50 rounded-[2.5rem] max-h-[350px] border border-gray-100 shadow-inner overflow-y-auto custom-scrollbar">
-                    {STICKER_URLS.map((url, i) => (
-                      <button key={i} onClick={() => handleAddSticker(url)} className="p-2 bg-white rounded-2xl hover:scale-110 transition-all aspect-square overflow-hidden shadow-sm border border-transparent flex items-center justify-center">
-                        <img src={url} alt={`Sticker ${i}`} className="w-full h-full object-contain" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isAdminMode && (
-              <div className="space-y-4 border-t pt-8 border-gray-100">
-                <span className="text-[10px] font-black uppercase text-[#ffb3a3] tracking-widest">유저 권한 설정 (어드민 전용)</span>
-                <div className="grid grid-cols-1 gap-2">
-                  {[
-                    { key: 'allowUserUpload', label: '사진 업로드 허용', icon: <Icons.Change /> },
-                    { key: 'allowUserDecorate', label: '꾸미기(스티커 등) 허용', icon: <Icons.Change /> },
-                    { key: 'allowUserText', label: '문구 작성 허용', icon: <Icons.Edit /> }
-                  ].map((p) => {
-                    // isAdminMode일 때만 이 UI가 노출되므로 AdminScene으로 확신할 수 있음
-                    const scene = currentScene as AdminScene;
-                    const isAllowed = scene[p.key as keyof AdminScene] ?? true;
-                    return (
-                      <button
-                        key={p.key}
-                        onClick={() => setCurrentScene((prev) => {
-                          const adminPrev = prev as AdminScene;
-                          const key = p.key as keyof AdminScene;
-                          return { ...prev, [key]: !adminPrev[key] };
-                        })}
-                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isAllowed ? 'bg-white border-gray-100 text-gray-900' : 'bg-gray-50 border-transparent text-gray-400 opacity-60'}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="scale-75 opacity-50">{p.icon}</span>
-                          <span className="text-[10px] font-black uppercase">{p.label}</span>
-                        </div>
-                        <div className={`w-10 h-6 rounded-full relative transition-all ${isAllowed ? 'bg-[#03C75A]' : 'bg-gray-200'}`}>
-                          <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isAllowed ? 'left-5' : 'left-1'}`} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {(isAdminMode || canEditText) && (
-              <div className="space-y-6 border-t pt-8 border-gray-100">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">문구작성</span>
-                </div>
-
-                {slots && slots.texts.length > 0 ? (
-                  slots.texts.map(slot => (
-                    <div key={slot.id} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] font-black uppercase text-gray-400">{slot.name}</span>
-                        {!slot.isEditable && !isAdminMode && <span className="text-[8px] bg-red-100 text-red-500 px-2 py-0.5 rounded font-black uppercase tracking-tighter">이전 씬에서 수정</span>}
-                      </div>
-                      <textarea
-                        disabled={!slot.isEditable && !isAdminMode}
-                        className={`w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-24 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner ${!slot.isEditable && !isAdminMode ? 'opacity-40 cursor-not-allowed' : ''}`}
-                        value={(currentScene as UserScene).slotTexts?.[slot.id] || (isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content)}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleTextChangeForSlot(slot.id, e.target.value)}
-                        placeholder={!slot.isEditable && !isAdminMode ? "이전 씬에서 수정된 내용이 자동 반영됩니다." : "이곳에 내용을 입력하세요..."}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <textarea
-                    className="w-full p-6 bg-gray-50 border border-gray-100 rounded-3xl text-sm h-32 md:h-36 resize-none outline-none focus:ring-4 focus:ring-[#ffb3a3]/5 focus:border-[#ffb3a3] transition-all leading-relaxed shadow-inner"
-                    value={isAdminMode ? (currentScene as AdminScene).defaultContent : (currentScene as UserScene).content}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                      setCurrentScene((prev: AdminScene | UserScene) => ({ ...prev, [isAdminMode ? 'defaultContent' : 'content']: e.target.value }));
-                    }}
-                    placeholder="오늘의 소중한 순간을 기록해보세요..."
-                  />
-                )}
-              </div>
-            )}
-
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-gray-50 z-20">
-            <button
-              onClick={() => {
-                // 사용자 모드일 때는 관리자 오버레이(overlayUrl) 제외
-                const sceneToSave = isAdminMode
-                  ? currentScene
-                  : { ...currentScene, overlayUrl: undefined };
-                onSave(sceneToSave);
-              }}
-              className="w-full py-5 bg-[#03C75A] text-white font-black rounded-[2rem] text-[11px] uppercase shadow-2xl tracking-[0.3em]"
-            >
-              장면 저장하기
-            </button>
-          </div>
-        </aside>
+        {/* Hidden File Input */}
+        <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && activePhotoSlotId) handleFileChangeForSlot(activePhotoSlotId, file);
+        }} />
       </div>
     </div>
   );
 };
+
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);

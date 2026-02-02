@@ -41,6 +41,8 @@ export interface BaseScene {
   drawings: DrawPath[];
   width?: number;
   height?: number;
+  name?: string;
+  order?: number;
 }
 
 export interface Slot {

@@ -172,7 +172,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
 
     return (
         <div
-            className={`relative overflow-hidden w-full ${className} bg-black flex items-center justify-center`}
+            className={`relative overflow-hidden w-full ${className} bg-transparent flex items-center justify-center`}
             style={{ aspectRatio: '16 / 9' }}
         >
             {!processedJson ? (
