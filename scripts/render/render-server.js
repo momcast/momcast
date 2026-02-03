@@ -51,6 +51,9 @@ function extractSceneTemplate(fullTemplate, sceneComp) {
         h: sceneComp.h,
         nm: sceneComp.nm,
         ddd: 0,
+        // [Fix] Inject fonts/chars to prevent text rendering crashes
+        fonts: fullTemplate.fonts,
+        chars: fullTemplate.chars,
         assets: sceneAssets,
         layers: sceneComp.layers
     };
