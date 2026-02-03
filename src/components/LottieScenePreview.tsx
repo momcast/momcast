@@ -44,6 +44,11 @@ function getPatchedAssets(template: any, userImages: Record<string, string> = {}
         if (a.p && typeof a.p === 'string' && a.p.includes('/templates/images/')) return a;
 
         const asset = { ...a }; // Shallow Clone
+
+        // [Fix] Precomp에 w, h가 없으면 렌더링 실패함 -> 강제 주입
+        if (!asset.w) asset.w = template.w || 1920;
+        if (!asset.h) asset.h = template.h || 1080;
+
         if (asset.p && typeof asset.p === 'string') {
             const lowerP = asset.p.toLowerCase();
 
