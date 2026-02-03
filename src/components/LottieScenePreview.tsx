@@ -55,13 +55,22 @@ function getPatchedAssets(template: any, userImages: Record<string, string> = {}
             // 1. 비디오 -> 이미지 교체 (필수)
             if (lowerP.endsWith('.mp4') || lowerP.endsWith('.mov')) {
                 asset.u = '';
-                // [Fix] img_11.jpg가 깨졌을 가능성 대비하여 img_1.jpg로 변경
-                // (차후 올바른 캔들 배경 이미지 매핑 필요)
-                asset.p = '/templates/images/img_1.jpg';
+
+                // [Fix] Smart Mapping: vid_N.mov -> img_N.jpg
+                // 모든 비디오를 하나의 이미지로 덮어쓰던 문제를 해결합니다.
+                // 파일명에 포함된 숫자(ID)를 추출하여, 대응되는 이미지 파일을 찾아 연결합니다.
+                const match = lowerP.match(/vid_(\d+)/) || lowerP.match(/img_(\d+)/);
+                if (match && match[1]) {
+                    asset.p = `/templates/images/img_${match[1]}.jpg`;
+                } else {
+                    // ID를 찾을 수 없는 경우 안전한 Fallback
+                    asset.p = '/templates/images/img_1.jpg';
+                }
             }
-            // 2. 이미지 경로 정규화
+            // 2. 이미지 경로 정규화 (이미지 파일인 경우)
             else if (!lowerP.startsWith('data:') && !lowerP.startsWith('http')) {
                 asset.u = '';
+                // 원본 파일명 그대로 사용 (img_XX.jpg 등 자동 매칭 기대)
                 asset.p = `/templates/images/${asset.p.split('/').pop()}`;
             }
         }
