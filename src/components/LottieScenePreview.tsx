@@ -122,6 +122,9 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             h: targetComp.h || fullTemplate.h || 1080,
             nm: `Preview ${sceneId}`,
             ddd: 0,
+            fonts: fullTemplate.fonts,   // [Fix] 폰트 스타일 정보 복사
+            chars: fullTemplate.chars,   // [Fix] 글자 정보 복사
+            markers: fullTemplate.markers, // [Fix] 마커 정보 복사
             assets: patchedAssets, // [핵심] User Image가 주입된 에셋 참조
             layers: targetComp.layers // [핵심] 씬 레이어 참조
         };
