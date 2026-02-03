@@ -157,14 +157,14 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             // console.time(`[Lottie] Render ${sceneId}`);
             const instance = lottie.loadAnimation({
                 container: containerRef.current,
-                renderer: 'canvas', // 이미지 렌더링에 유리
+                renderer: 'svg', // [Fix] Canvas -> SVG 교체 (마스크/이펙트 지원 강화)
                 loop: false,
                 autoplay: false, // 자동재생 X
                 animationData: minimalJson,
                 rendererSettings: {
                     preserveAspectRatio: 'xMidYMid slice',
                     imagePreserveAspectRatio: 'xMidYMid slice',
-                    clearCanvas: true,
+                    // clearCanvas: true, // SVG에서는 미지원
                     progressiveLoad: false, // 즉시 로드
                 }
             });
