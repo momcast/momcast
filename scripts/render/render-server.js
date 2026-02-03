@@ -170,19 +170,46 @@ async function render() {
             renderer: 'canvas',
             loop: false,
             autoplay: false,
+            rendererSettings: {
+                clearCanvas: true, // [Fix] SVG Artifact 방지
+                preserveAspectRatio: 'xMidYMid slice'
+            },
             animationData: ${sceneJson}
         });
         
-        animation.addEventListener('DOMLoaded', () => {
-            const userImages = ${JSON.stringify(userImages || {})};
-            const userTexts = ${JSON.stringify(userTexts || {})};
-            
-            animation.assets.forEach(asset => {
-                if(userImages[asset.id]) {
-                    asset.p = userImages[asset.id];
-                    asset.u = '';
-                }
-            });
+            animation.addEventListener('DOMLoaded', () => {
+                const userImages = ${JSON.stringify(userImages || {})};
+                const userTexts = ${JSON.stringify(userTexts || {})};
+                
+                animation.assets.forEach(asset => {
+                    // [Fix] Smart Asset Mapping (vid_N -> img_N)
+                    // 프리뷰와 동일한 로직을 적용하여 배경 누락 방지
+                    if (asset.p && typeof asset.p === 'string') {
+                        const lowerP = asset.p.toLowerCase();
+                        
+                        if (lowerP.endsWith('.mp4') || lowerP.endsWith('.mov')) {
+                            const match = lowerP.match(/vid_(\d+)/) || lowerP.match(/img_(\d+)/); 
+                            asset.u = ''; // 로컬/상대 경로 사용
+                            if (match && match[1]) {
+                                asset.p = \`/templates/images/img_\${match[1]}.jpg\`;
+                            } else {
+                                // Default Fallback
+                                asset.p = '/templates/images/img_1.jpg';
+                            }
+                        }
+                         // 이미지 경로 정규화
+                        else if (!lowerP.startsWith('data:') && !lowerP.startsWith('http')) {
+                            asset.u = '';
+                            asset.p = \`/templates/images/\${asset.p.split('/').pop()}\`;
+                        }
+                    }
+
+                    // User Image Injection
+                    if(userImages[asset.id]) {
+                        asset.p = userImages[asset.id];
+                        asset.u = '';
+                    }
+                });
             
             const searchLayers = (layers) => {
                 layers.forEach(layer => {
