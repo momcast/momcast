@@ -80,24 +80,50 @@ async function render() {
         const fullTemplate = await res.json();
         console.log(`✅ Template fetched (${JSON.stringify(fullTemplate).length} bytes)`);
 
-        // [Global Fix] Inject dimensions (1920x1080) for undefined assets to prevent blank/gray screens
-        // Also force unhide specific layers if needed, but primarily dimension fix solves 'final' comp visibility.
+        // [Global Fix] Robust Recursive Dimension Injection & Unhide (Updated)
         let fixedParamsCount = 0;
-        const fixAssets = (assets) => {
-            if (!assets) return;
-            assets.forEach(a => {
-                // Fix Dimensions if missing
+
+        // 1. Recursive Fix Function
+        const fixRecursive = (layers) => {
+            if (!layers) return;
+            layers.forEach(l => {
+                // Force Unhide
+                if (l.hd === true) l.hd = false;
+
+                // Recurse into Asset
+                if (l.refId) {
+                    const asset = fullTemplate.assets.find(a => a.id === l.refId);
+                    if (asset) {
+                        // Fix asset dim again if missed
+                        if (!asset.w || !asset.h) {
+                            asset.w = 1920;
+                            asset.h = 1080;
+                            fixedParamsCount++;
+                        }
+                        if (asset.layers) fixRecursive(asset.layers);
+                    }
+                }
+            });
+        };
+
+        // 2. Apply to Assets List (Base Fix)
+        if (fullTemplate.assets) {
+            fullTemplate.assets.forEach(a => {
                 if (!a.w || !a.h) {
                     a.w = 1920;
                     a.h = 1080;
                     fixedParamsCount++;
                 }
-                // Recurse into layers? Actually layers don't have w/h usually (except solids/nulls), but assets do.
-                // We don't iterate layers here, just assets definitions.
             });
-        };
-        fixAssets(fullTemplate.assets);
-        console.log(`🔧 Global Fix: Injected dimensions into ${fixedParamsCount} assets.`);
+        }
+
+        // 3. Apply Recursive Fix to everything
+        if (fullTemplate.layers) fixRecursive(fullTemplate.layers);
+        if (fullTemplate.assets) fullTemplate.assets.forEach(a => {
+            if (a.layers) fixRecursive(a.layers);
+        });
+
+        console.log(`🔧 Global Robust Fix: Dimensions injected & Hidden layers unlocked. Total Ops: ${fixedParamsCount}`);
 
         console.log(`\n📦 Received scene data:`, JSON.stringify(scenes));
 
