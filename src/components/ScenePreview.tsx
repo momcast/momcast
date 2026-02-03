@@ -19,9 +19,10 @@ interface Props {
     className?: string;
     hideOverlay?: boolean;
     lottieTemplate?: any;
+    lazy?: boolean;
 }
 
-export const ScenePreview: React.FC<Props> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false, lottieTemplate }) => {
+export const ScenePreview: React.FC<Props> = React.memo(({ scene, adminConfig, isAdmin, className = "", hideOverlay = false, lottieTemplate, lazy = true }) => {
     const displayScene = scene;
     // const overlayConfig = (!isAdmin && adminConfig) ? adminConfig : (scene as AdminScene | UserScene);
     const width = scene.width || 1920;
@@ -29,11 +30,13 @@ export const ScenePreview: React.FC<Props> = React.memo(({ scene, adminConfig, i
     const isVertical = height > width;
 
     // [Performance] Lazy Loading State
-    const [isInView, setIsInView] = useState(false);
+    const [isInView, setIsInView] = useState(!lazy);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        if (!lazy) return;
         if (!containerRef.current) return;
+
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) {
                 setIsInView(true);
@@ -43,7 +46,7 @@ export const ScenePreview: React.FC<Props> = React.memo(({ scene, adminConfig, i
 
         observer.observe(containerRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [lazy]);
 
     // Prepare Slot Data for Lottie
     const slots = isAdmin ? (scene as AdminScene).slots : adminConfig?.slots;

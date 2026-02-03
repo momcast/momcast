@@ -525,6 +525,7 @@ export const SceneEditor = React.memo<SceneEditorProps>(({
                             isAdmin={isAdminMode}
                             hideOverlay={!showGuideOverlay}
                             lottieTemplate={lottieTemplate}
+                            lazy={false}
                         />
 
                         {/* Crop Overlay */}
