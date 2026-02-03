@@ -54,15 +54,10 @@ function getPatchedAssets(template: any, userImages: Record<string, string> = {}
 
             // 1. 비디오 -> 이미지 교체 (필수)
             if (lowerP.endsWith('.mp4') || lowerP.endsWith('.mov')) {
-                // [Fix] Scene 20 배경 강제 주입 (사용자 요청: "이 화면 그대로 나오게 하라")
-                // vid_9.mov (clip7.mov)는 Scene 20의 배경임.
-                if (lowerP.includes('vid_9.mov') || lowerP.includes('clip7.mov')) {
-                    asset.u = '';
-                    asset.p = '/templates/images/custom_bg_20.png';
-                } else {
-                    asset.u = '';
-                    asset.p = '/templates/images/img_11.jpg'; // 그 외 비디오는 기본 배경
-                }
+                asset.u = '';
+                // [Fix] img_11.jpg가 깨졌을 가능성 대비하여 img_1.jpg로 변경
+                // (차후 올바른 캔들 배경 이미지 매핑 필요)
+                asset.p = '/templates/images/img_1.jpg';
             }
             // 2. 이미지 경로 정규화
             else if (!lowerP.startsWith('data:') && !lowerP.startsWith('http')) {
