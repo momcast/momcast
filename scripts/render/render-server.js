@@ -79,6 +79,26 @@ async function render() {
 
         const fullTemplate = await res.json();
         console.log(`✅ Template fetched (${JSON.stringify(fullTemplate).length} bytes)`);
+
+        // [Global Fix] Inject dimensions (1920x1080) for undefined assets to prevent blank/gray screens
+        // Also force unhide specific layers if needed, but primarily dimension fix solves 'final' comp visibility.
+        let fixedParamsCount = 0;
+        const fixAssets = (assets) => {
+            if (!assets) return;
+            assets.forEach(a => {
+                // Fix Dimensions if missing
+                if (!a.w || !a.h) {
+                    a.w = 1920;
+                    a.h = 1080;
+                    fixedParamsCount++;
+                }
+                // Recurse into layers? Actually layers don't have w/h usually (except solids/nulls), but assets do.
+                // We don't iterate layers here, just assets definitions.
+            });
+        };
+        fixAssets(fullTemplate.assets);
+        console.log(`🔧 Global Fix: Injected dimensions into ${fixedParamsCount} assets.`);
+
         console.log(`\n📦 Received scene data:`, JSON.stringify(scenes));
 
         // 2. 씬 정보로 컴포지션 필터링
