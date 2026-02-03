@@ -118,26 +118,19 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
         const targetComp = findSceneComp(fullTemplate.assets, sceneId);
         if (!targetComp) return null;
 
-        // [Fix] Layer Timing Normalization
-        // 일부 씬(14~21)의 st가 음수라 0프레임에서 이미 애니메이션이 지난 상태로 나옴.
-        // 강제로 모든 레이어를 0프레임 시작으로 정렬.
-        const normalizedLayers = targetComp.layers.map((l: any) => ({ ...l }));
-        const minSt = Math.min(...normalizedLayers.map((l: any) => l.st || 0));
-
-        let maxOp = 0;
-        normalizedLayers.forEach((l: any) => {
-            const offset = minSt;
-            l.st = (l.st || 0) - offset;
-            l.ip = (l.ip || 0) - offset;
-            l.op = (l.op || 0) - offset;
-            if (l.op > maxOp) maxOp = l.op;
-        });
+        // [Fix] Layer Timing Correction
+        // Normalization(0점 정렬)은 AE의 싱크를 깨뜨리므로 롤백했습니다.
+        // 대신, 음수 ip로 인한 잠재적 렌더링 문제를 방지하기 위해 ip만 0으로 클램핑합니다.
+        const clampedLayers = targetComp.layers.map((l: any) => ({
+            ...l,
+            ip: Math.max(0, l.ip || 0) // Ensure visibility starts at 0 if it was negative
+        }));
 
         return {
             v: fullTemplate.v || "5.5.7",
             fr: fullTemplate.fr || 30,
             ip: 0,
-            op: maxOp || targetComp.op || 120,
+            op: targetComp.op || 120, // 씬 길이만큼
             w: targetComp.w || fullTemplate.w || 1920,
             h: targetComp.h || fullTemplate.h || 1080,
             nm: `Preview ${sceneId}`,
@@ -146,7 +139,7 @@ export const LottieScenePreview: React.FC<Props> = React.memo(({
             chars: fullTemplate.chars,   // [Fix] 글자 정보 복사
             markers: fullTemplate.markers, // [Fix] 마커 정보 복사
             assets: patchedAssets, // [핵심] User Image가 주입된 에셋 참조
-            layers: normalizedLayers // [Fix] 시간 정규화된 레이어 사용
+            layers: clampedLayers // [Fix] 원본 싱크 유지 (Normalization 롤백)
         };
     }, [fullTemplate, sceneId, patchedAssets]);
 
